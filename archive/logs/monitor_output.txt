@@ -1,0 +1,5 @@
+home/esp32_core/ntp synced
+home/esp32_core/wifi connected
+home/esp32_core/availability online
+wordclock/command status
+wordclock/command set_time 14:30

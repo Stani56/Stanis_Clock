@@ -1,0 +1,40 @@
+# ESP32 Word Clock - CI/CD Build Configuration
+# This file is used by GitHub Actions for optimized builds
+
+# Optimize for size instead of performance for CI builds
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+# CONFIG_COMPILER_OPTIMIZATION_PERF is not set
+
+# Reduce logging to save space
+CONFIG_LOG_DEFAULT_LEVEL_WARN=y
+CONFIG_LOG_DEFAULT_LEVEL=2
+
+# Custom partition table for large application
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Flash configuration - 4MB flash size
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+CONFIG_ESPTOOLPY_FLASHFREQ="80m"
+
+# CPU Frequency - Keep at 240MHz
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ=240
+CONFIG_ESP32_DEFAULT_CPU_FREQ_240=y
+CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ=240
+
+# Disable power management
+# CONFIG_PM_ENABLE is not set
+
+# XTAL Frequency
+CONFIG_ESP32_XTAL_FREQ_40=y
+CONFIG_ESP32_XTAL_FREQ=40
+
+# FreeRTOS configuration
+CONFIG_FREERTOS_HZ=1000
+
+# Console configuration
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200

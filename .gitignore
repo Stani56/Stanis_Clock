@@ -1,0 +1,121 @@
+# ESP-IDF Build System
+build/
+sdkconfig
+sdkconfig.old
+.config
+.config.old
+
+# ESP-IDF Build Files
+*.bin
+*.elf
+*.map
+managed_components/
+
+# Bootloader and Partition Files
+bootloader.bin
+partition_table.bin
+
+# ESP-IDF Cache
+.ccls-cache/
+.cache/
+
+# Configuration and Logs
+*.log
+sdkconfig.*
+!sdkconfig.defaults
+!sdkconfig.ci
+
+# Log and Serial Output Files
+serial_output*.txt
+console_log*.txt
+test_output*.txt
+version.txt
+.version
+
+# Coverage Reports
+*.gcda
+*.gcno
+*.gcov
+htmlcov/
+
+# IDE Files
+.vscode/
+.vs/
+*.code-workspace
+.idea/
+*.iml
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Temporary Files
+*~
+*.swp
+*.swo
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Python Files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.pytest_cache/
+
+# Node.js (if using any web tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Personal Configuration
+# Uncomment these if you want to ignore personal config files
+# config.h
+# secrets.h
+# wifi_credentials.h
+
+# Serial Output Logs (already covered above)
+
+# Flash Tool Files
+*.pyc
+flash_args
+
+# Certificate Files (be careful about committing certificates)
+*.pem
+*.crt
+*.key
+!esp_crt_bundle.c
+
+# Documentation Build Files
+docs/_build/
+docs/doxygen_warning_log.txt
+
+# Version Files (already covered above)
+
+# Backup Files
+*.backup
+*.bak
+*.orig
+
+# Test Results
+test_results/
+test_output/
+
+# Environment Variables
+.env
+.env.local
+.env.prod
+
+# Custom Build Scripts Output
+custom_build/
+output/
+
+# ESP-IDF Component Manager
+dependencies.lock
+managed_components/

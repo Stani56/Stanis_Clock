@@ -1,0 +1,54 @@
+# ESP32 Word Clock Configuration Defaults
+
+# CPU Frequency Configuration - Set to 240MHz
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ=240
+CONFIG_ESP32_DEFAULT_CPU_FREQ_240=y
+CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ=240
+
+# Power Management - Disable to maintain 240MHz
+# CONFIG_PM_ENABLE is not set
+
+# Flash configuration - 4MB flash size for large application
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+CONFIG_ESPTOOLPY_FLASHFREQ="80m"
+
+# Main XTAL Frequency
+CONFIG_ESP32_XTAL_FREQ_40=y
+CONFIG_ESP32_XTAL_FREQ=40
+
+# FreeRTOS Tick Rate - 1000Hz for smooth animations
+CONFIG_FREERTOS_HZ=1000
+
+# Enable CPU frequency reporting
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
+
+# Optimization level - Optimize for performance (production)
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+
+# Custom partition table for large application
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Enable logging levels for debugging
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_DEFAULT_LEVEL=3
+
+# Stack size configurations to prevent overflow during Tier 1 MQTT processing
+# Critical: sys_evt task stack size - this task handles WiFi and system events
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=8192
+# Main task stack size for complex initialization
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=12288
+# Timer task stack size for MQTT timers and callbacks
+CONFIG_FREERTOS_TIMER_TASK_STACK_DEPTH=8192
+# MQTT client task stack size
+CONFIG_MQTT_TASK_STACK_SIZE=12288
+# WiFi driver task stack size
+CONFIG_ESP32_WIFI_TASK_STACK_SIZE=8192
+# TCP/IP task stack size for network operations
+CONFIG_LWIP_TCPIP_TASK_STACK_SIZE=8192
+# Event loop task stack size
+CONFIG_ESP_EVENT_TASK_STACK_SIZE=8192
