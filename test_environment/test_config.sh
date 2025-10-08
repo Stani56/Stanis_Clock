@@ -7,6 +7,9 @@ export MQTT_PORT="8883"
 export MQTT_USERNAME="esp32_led_device"
 export MQTT_PASSWORD="tufcux-3xuwda-Vomnys"
 
+# Device Configuration (MUST match MQTT_DEVICE_NAME in mqtt_manager.h)
+export MQTT_DEVICE_NAME="Clock_Stani_1"
+
 # ESP32 Serial Settings
 export SERIAL_PORT="/dev/ttyUSB0"  # Update this to your ESP32 port
 export SERIAL_BAUD="115200"
@@ -22,7 +25,9 @@ export COMBINED_LOG="$LOGS_DIR/combined_output.log"
 export TEST_DELAY_MS=3000  # Delay between test commands
 export MONITOR_TIMEOUT=300  # Monitor timeout in seconds
 
-# Topics
-export COMMAND_TOPIC="home/esp32_core/command"
-export STATUS_TOPIC="home/esp32_core/status"
-export MONITOR_TOPICS="home/esp32_core/+ wordclock/+"
+# Topics (dynamically generated from device name)
+export TOPIC_BASE="home/$MQTT_DEVICE_NAME"
+export COMMAND_TOPIC="$TOPIC_BASE/command"
+export STATUS_TOPIC="$TOPIC_BASE/status"
+export AVAILABILITY_TOPIC="$TOPIC_BASE/availability"
+export MONITOR_TOPICS="$TOPIC_BASE/+"

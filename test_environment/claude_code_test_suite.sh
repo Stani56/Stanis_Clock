@@ -1,10 +1,27 @@
 #!/bin/bash
 # Automated Test Suite designed for Claude Code execution
 # This script provides standardized testing capabilities for the ESP32 Word Clock
+#
+# IMPORTANT: Ensure test_config.sh has MQTT_DEVICE_NAME matching mqtt_manager.h
+#            Current device: Clock_Stani_1
+#            Topics: home/Clock_Stani_1/*
 
 # Load configuration
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$script_dir/test_config.sh"
+
+# Verify configuration loaded
+if [ -z "$MQTT_DEVICE_NAME" ]; then
+    echo "❌ ERROR: MQTT_DEVICE_NAME not set in test_config.sh"
+    echo "Please ensure test_config.sh is properly configured"
+    exit 1
+fi
+
+echo "📡 Test Configuration:"
+echo "   Device Name: $MQTT_DEVICE_NAME"
+echo "   Topic Base: $TOPIC_BASE"
+echo "   Command Topic: $COMMAND_TOPIC"
+echo ""
 
 # Initialize test environment
 TEST_SESSION="claude_test_$(date +%Y%m%d_%H%M%S)"
@@ -41,7 +58,7 @@ run_claude_test() {
         -u "$MQTT_USERNAME" \
         -P "$MQTT_PASSWORD" \
         --capath /etc/ssl/certs \
-        -t "home/esp32_core/+" \
+        -t "$MONITOR_TOPICS" \
         -v > "$monitor_log" 2>&1 &
     
     local monitor_pid=$!
@@ -55,7 +72,7 @@ run_claude_test() {
         -u "$MQTT_USERNAME" \
         -P "$MQTT_PASSWORD" \
         --capath /etc/ssl/certs \
-        -t "home/esp32_core/command" \
+        -t "$COMMAND_TOPIC" \
         -m "$command" 2>&1
     send_result=$?
     
@@ -72,7 +89,7 @@ run_claude_test() {
     local response_found=false
     
     # Check if command was echoed
-    if grep -q "home/esp32_core/command $command" "$monitor_log"; then
+    if grep -q "$COMMAND_TOPIC $command" "$monitor_log"; then
         command_echoed=true
     fi
     
@@ -145,7 +162,7 @@ if timeout 5 mosquitto_sub \
     -u "$MQTT_USERNAME" \
     -P "$MQTT_PASSWORD" \
     --capath /etc/ssl/certs \
-    -t "home/esp32_core/availability" \
+    -t "$AVAILABILITY_TOPIC" \
     -v 2>/dev/null | grep -q "online"; then
     echo "✅ ESP32 is online"
 else
@@ -160,7 +177,7 @@ timeout 3 mosquitto_sub \
     -u "$MQTT_USERNAME" \
     -P "$MQTT_PASSWORD" \
     --capath /etc/ssl/certs \
-    -t "home/esp32_core/+" \
+    -t "$MONITOR_TOPICS" \
     -v > "$LOGS_DIR/pre_test_activity.log" 2>&1
 
 if [ -s "$LOGS_DIR/pre_test_activity.log" ]; then
@@ -278,7 +295,7 @@ timeout 3 mosquitto_sub \
     -u "$MQTT_USERNAME" \
     -P "$MQTT_PASSWORD" \
     --capath /etc/ssl/certs \
-    -t "home/esp32_core/+" \
+    -t "$MONITOR_TOPICS" \
     -v > "$LOGS_DIR/post_test_activity.log" 2>&1
 
 if [ -s "$LOGS_DIR/post_test_activity.log" ]; then
