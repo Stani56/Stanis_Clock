@@ -47,30 +47,34 @@ The TLC59116 supports reading back several registers that reflect the actual har
 
 ## Enhanced Validation Architecture
 
-### Three-Level Validation Strategy
+### Complete Validation Strategy
+
+**Design Philosophy:** Run FULL validation every 5 minutes. The 110ms execution time has negligible system impact (0.037% CPU time), and I2C bus capacity is underutilized. Fast fault detection (within 5 minutes) outweighs any theoretical performance concerns.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ Level 1: Software State Validation (Original Proposal)          │
-│ ├─ Compare led_state[10][16] vs expected bitmap                 │
-│ ├─ Check for invalid LED positions active                       │
-│ └─ Execution Time: ~1-2ms (no I2C)                              │
-└─────────────────────────────────────────────────────────────────┘
-                             ↓
-┌─────────────────────────────────────────────────────────────────┐
-│ Level 2: Hardware State Readback (NEW - This Addendum)          │
-│ ├─ Read PWM registers from all 10 TLC59116 devices              │
-│ ├─ Compare hardware PWM vs software led_state                   │
-│ ├─ Read GRPPWM to verify global brightness                      │
-│ └─ Execution Time: ~50-100ms (I2C reads)                        │
-└─────────────────────────────────────────────────────────────────┘
-                             ↓
-┌─────────────────────────────────────────────────────────────────┐
-│ Level 3: Hardware Fault Detection (NEW - This Addendum)         │
-│ ├─ Read EFLAG registers for LED errors                          │
-│ ├─ Detect open-circuit or short-circuit conditions              │
-│ ├─ Check LEDOUT registers for correct mode                      │
-│ └─ Execution Time: ~20-30ms (I2C reads)                         │
+│ Complete LED Validation (runs every 5 minutes)                  │
+│                                                                  │
+│ 1. Software State Validation                                    │
+│    ├─ Compare led_state[10][16] vs expected bitmap              │
+│    ├─ Check for invalid LED positions active                    │
+│    └─ Time: ~2ms (no I2C)                                       │
+│                                                                  │
+│ 2. Hardware State Readback                                      │
+│    ├─ Read PWM registers from all 10 TLC59116 devices           │
+│    ├─ Compare hardware PWM vs software led_state                │
+│    ├─ Read GRPPWM to verify global brightness                   │
+│    └─ Time: ~80ms (10 I2C read transactions)                    │
+│                                                                  │
+│ 3. Hardware Fault Detection                                     │
+│    ├─ Read EFLAG registers for LED errors                       │
+│    ├─ Detect open-circuit or short-circuit conditions           │
+│    ├─ Check LEDOUT registers for correct mode                   │
+│    └─ Time: ~30ms (20 I2C read transactions)                    │
+│                                                                  │
+│ Total Time: ~110ms every 5 minutes                              │
+│ CPU Impact: 0.037% (negligible)                                 │
+│ Fault Detection: Within 5 minutes (excellent)                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -274,20 +278,21 @@ typedef struct {
 /**
  * @brief Complete LED display validation with hardware readback
  *
- * Performs three levels of validation:
- * 1. Software state vs expected state
- * 2. Hardware PWM readback vs software state
- * 3. Hardware fault detection (EFLAG registers)
+ * Performs comprehensive validation:
+ * 1. Software state vs expected state (~2ms)
+ * 2. Hardware PWM readback vs software state (~80ms)
+ * 3. Hardware fault detection via EFLAG registers (~30ms)
+ *
+ * Total execution time: ~110ms
+ * Recommended frequency: Every 5 minutes (0.037% CPU impact)
  *
  * @param current_hour Current hour (1-12)
  * @param current_minutes Current minutes (0-59)
- * @param validation_mode FULL, QUICK, or CRITICAL_ONLY
  * @return validation_result_enhanced_t Complete validation results
  */
 validation_result_enhanced_t validate_display_with_hardware(
     uint8_t current_hour,
-    uint8_t current_minutes,
-    validation_mode_t validation_mode
+    uint8_t current_minutes
 ) {
     validation_result_enhanced_t result = {0};
 
@@ -320,14 +325,13 @@ validation_result_enhanced_t validate_display_with_hardware(
     result.software_valid = (result.software_errors == 0);
 
     // ===================================================================
-    // LEVEL 2: Hardware State Readback (NEW)
+    // LEVEL 2: Hardware State Readback
     // ===================================================================
 
-    if (validation_mode == FULL || validation_mode == HARDWARE_ONLY) {
-        uint8_t hardware_pwm[10][16];
-        esp_err_t hw_ret = tlc_read_all_pwm_values(hardware_pwm);
+    uint8_t hardware_pwm[10][16];
+    esp_err_t hw_ret = tlc_read_all_pwm_values(hardware_pwm);
 
-        if (hw_ret == ESP_OK) {
+    if (hw_ret == ESP_OK) {
             // Compare hardware vs software state
             for (uint8_t row = 0; row < 10; row++) {
                 for (uint8_t col = 0; col < 16; col++) {
@@ -360,41 +364,38 @@ validation_result_enhanced_t validate_display_with_hardware(
 
             result.hardware_valid = (result.hardware_mismatch_count == 0 &&
                                     result.hardware_read_failures == 0);
-        } else {
-            ESP_LOGE(TAG, "Hardware readback failed completely");
-            result.hardware_valid = false;
-        }
+    } else {
+        ESP_LOGE(TAG, "Hardware readback failed completely");
+        result.hardware_valid = false;
     }
 
     // ===================================================================
-    // LEVEL 3: Hardware Fault Detection (NEW)
+    // LEVEL 3: Hardware Fault Detection
     // ===================================================================
 
-    if (validation_mode == FULL) {
-        esp_err_t eflag_ret = tlc_read_error_flags(result.eflag_values);
+    esp_err_t eflag_ret = tlc_read_error_flags(result.eflag_values);
 
-        if (eflag_ret == ESP_FAIL) {
-            result.hardware_faults_detected = true;
+    if (eflag_ret == ESP_FAIL) {
+        result.hardware_faults_detected = true;
 
-            // Count devices with faults
-            for (uint8_t i = 0; i < 10; i++) {
-                if (result.eflag_values[i][0] != 0 ||
-                    result.eflag_values[i][1] != 0) {
-                    result.devices_with_faults++;
-                }
+        // Count devices with faults
+        for (uint8_t i = 0; i < 10; i++) {
+            if (result.eflag_values[i][0] != 0 ||
+                result.eflag_values[i][1] != 0) {
+                result.devices_with_faults++;
             }
         }
+    }
 
-        // Verify GRPPWM consistency
-        result.expected_grppwm = tlc_get_global_brightness();
-        tlc_read_global_brightness(result.actual_grppwm);
+    // Verify GRPPWM consistency
+    result.expected_grppwm = tlc_get_global_brightness();
+    tlc_read_global_brightness(result.actual_grppwm);
 
-        for (uint8_t i = 0; i < 10; i++) {
-            if (result.actual_grppwm[i] != 0xFF &&
-                result.actual_grppwm[i] != result.expected_grppwm) {
-                result.grppwm_mismatch = true;
-                break;
-            }
+    for (uint8_t i = 0; i < 10; i++) {
+        if (result.actual_grppwm[i] != 0xFF &&
+            result.actual_grppwm[i] != result.expected_grppwm) {
+            result.grppwm_mismatch = true;
+            break;
         }
     }
 
@@ -447,109 +448,102 @@ validation_result_enhanced_t validate_display_with_hardware(
 
 ---
 
-## Performance Considerations
+## Performance Analysis
 
-### Execution Time Analysis
+### Execution Time Breakdown
 
 ```
-Level 1: Software Validation
-  - 160 LED comparisons
-  - No I2C operations
-  - Time: ~1-2ms
+Complete Validation (All 3 Levels):
 
-Level 2: Hardware PWM Readback
-  - 10 TLC devices × 16 registers each
-  - I2C reads: 10 transactions (with auto-increment)
-  - Time per device: ~5-8ms
-  - Total: ~50-80ms
+  Software Validation:
+    - 160 LED comparisons
+    - No I2C operations
+    - Time: ~2ms
 
-Level 3: Hardware Fault Detection
-  - 10 EFLAG reads (2 bytes each)
-  - 10 GRPPWM reads (1 byte each)
-  - Time: ~20-30ms
+  Hardware PWM Readback:
+    - 10 TLC devices × 16 registers each
+    - I2C reads: 10 transactions (with auto-increment)
+    - Time per device: ~8ms
+    - Total: ~80ms
 
-Total (Full Validation): ~70-110ms
+  Hardware Fault Detection:
+    - 10 EFLAG reads (2 bytes each)
+    - 10 GRPPWM reads (1 byte each)
+    - Time: ~30ms
+
+Total Validation Time: ~110ms
 ```
 
-### Optimization Strategies
+### System Impact Analysis
 
-**1. Progressive Validation:**
-```
-Every transition:
-  - Run Level 1 (software) - 2ms
+**Running every 5 minutes (300 seconds):**
+- Execution time: 110ms per validation
+- CPU usage: 110ms / 300000ms = **0.037%**
+- I2C operations: 30 reads / 300 seconds = **0.1 reads/second average**
+- User-visible impact: **None** (110ms is imperceptible)
 
-Every 10th transition (every 50 minutes):
-  - Run Level 2 (hardware readback) - 80ms
+**I2C Bus Capacity:**
+- Current system: Hundreds of writes during transitions
+- Validation adds: 30 reads every 5 minutes
+- Bus utilization: **Massively underutilized**
+- Conclusion: **No bottleneck concerns**
 
-Every 60th transition (every 5 hours):
-  - Run Level 3 (fault detection) - 30ms
-```
+### Why NOT to Use Progressive Validation
 
-**2. Parallel I2C Reads:**
-- Current code uses sequential reads
-- Could optimize with batched reads if needed
-- Trade-off: complexity vs time savings
+**Arguments AGAINST complexity:**
+1. **Delayed Fault Detection:** Hardware fault at 14:01 not detected until 19:01 (5 hours!)
+2. **Added Complexity:** Tracking validation counters, multiple code paths to test
+3. **False Economy:** "Saving" 80ms every 5 minutes has zero benefit
+4. **Debugging Difficulty:** "Which validation level ran when?" becomes confusing
+5. **No Real Benefit:** ESP32 is mostly idle between time updates
 
-**3. Selective Device Readback:**
-```c
-// Only read devices with active LEDs
-for (row = 0; row < 10; row++) {
-    if (row_has_active_leds(row)) {
-        tlc_read_pwm_values(row, hardware_pwm[row]);
-    }
-}
-// Reduces reads from 10 to ~3-5 per validation
-```
+**Simple is Better:**
+- One validation function that always does the same thing
+- Predictable execution time and behavior
+- Consistent monitoring data for Home Assistant
+- Fast fault detection (within 5 minutes maximum)
 
 ---
 
 ## Integration Strategy
 
-### Validation Trigger Points
+### Recommended Implementation
 
-**1. Post-Transition (Primary)**
-```c
-void transition_complete_callback(void) {
-    // Software validation (fast)
-    validation_result_enhanced_t result =
-        validate_display_with_hardware(hour, minutes, QUICK);
-
-    if (!result.is_valid) {
-        handle_validation_failure(&result);
-    }
-}
-```
-
-**2. Periodic Deep Validation**
+**Simple Periodic Validation (Recommended)**
 ```c
 void periodic_validation_task(void *pvParameters) {
-    static uint32_t validation_count = 0;
-
     while(1) {
         vTaskDelay(pdMS_TO_TICKS(300000));  // 5 minutes
-        validation_count++;
 
-        validation_mode_t mode;
-        if (validation_count % 12 == 0) {
-            // Every hour: Full validation with hardware
-            mode = FULL;
-        } else {
-            // Every 5 min: Quick software check
-            mode = QUICK;
+        // Always run FULL validation (110ms)
+        validation_result_enhanced_t result =
+            validate_display_with_hardware(hour, minutes);
+
+        if (!result.is_valid) {
+            handle_validation_failure(&result);
         }
 
-        validation_result_enhanced_t result =
-            validate_display_with_hardware(hour, minutes, mode);
-
+        // Publish results to MQTT for Home Assistant monitoring
         publish_validation_results(&result);
     }
 }
 ```
 
-**3. On-Demand (MQTT Command)**
+**Why this approach:**
+- Simple: No complex scheduling logic
+- Fast fault detection: Maximum 5 minutes to detect any issue
+- Predictable: Always runs the same validation
+- Negligible impact: 0.037% CPU time
+- Consistent data: Home Assistant graphs show continuous monitoring
+
+**On-Demand Validation (MQTT Command)**
 ```bash
+# Trigger immediate validation
 Topic: home/Clock_Stani_1/display/validation/trigger
-Payload: {"mode": "full", "include_hardware": true}
+Payload: "validate"
+
+# Response will be published to status topic
+Topic: home/Clock_Stani_1/display/validation/hardware
 ```
 
 ---
@@ -738,11 +732,13 @@ void recover_hardware_fault(validation_result_enhanced_t *result) {
 
 ### Performance Impact
 
-| Validation Mode | Time | I2C Operations | When to Use |
-|----------------|------|----------------|-------------|
-| QUICK (Software only) | 2ms | 0 | Every 5 minutes |
-| HARDWARE_READBACK | 80ms | 10 reads | Every hour |
-| FULL (All levels) | 110ms | 30 reads | Every 5 hours or on-demand |
+| Metric | Value | Impact |
+|--------|-------|--------|
+| Total execution time | 110ms | Imperceptible to user |
+| CPU usage (5 min intervals) | 0.037% | Negligible |
+| I2C operations | 30 reads / 5 min | 0.1 reads/sec average |
+| Fault detection latency | Max 5 minutes | Excellent |
+| Recommended frequency | Every 5 minutes | Always run FULL validation |
 
 ### Benefits Over Software-Only Validation
 
@@ -756,19 +752,30 @@ void recover_hardware_fault(validation_result_enhanced_t *result) {
 
 ## Implementation Priority
 
-### Phase 1: Basic Hardware Readback (High Priority)
+### Phase 1: Hardware Readback Functions (2-3 days)
 - Implement `tlc_read_pwm_values()` and `tlc_read_all_pwm_values()`
-- Add Level 2 validation (hardware vs software comparison)
-- Test on real hardware
+- Implement `tlc_read_global_brightness()` and `tlc_read_error_flags()`
+- Unit test all I2C read functions on real hardware
+- Verify auto-increment mode works for batch reads
 
-### Phase 2: Fault Detection (Medium Priority)
-- Implement EFLAG register reading
-- Add Level 3 validation (hardware fault detection)
-- Implement recovery mechanisms
+### Phase 2: Complete Validation Function (2-3 days)
+- Implement `validate_display_with_hardware()` with all 3 levels
+- Implement `validation_result_enhanced_t` structure
+- Add hardware comparison logic with tolerance (±2 PWM)
+- Test validation on known-good and known-bad states
 
-### Phase 3: Optimization (Low Priority)
-- Progressive validation strategy
-- Selective device readback
-- Performance tuning
+### Phase 3: Recovery and Integration (2 days)
+- Implement `handle_validation_failure()` with recovery actions
+- Implement `recover_hardware_mismatch()` and `recover_hardware_fault()`
+- Create periodic validation task (5-minute interval)
+- Add MQTT command for on-demand validation
 
-**Estimated Effort:** +3-5 days beyond original validation proposal
+### Phase 4: MQTT Diagnostics (1-2 days)
+- Implement `publish_validation_results()` function
+- Add Home Assistant sensor configurations
+- Test trending and alerting in Home Assistant
+- Document MQTT topics and payloads
+
+**Total Estimated Effort:** 7-10 days of development + testing
+
+**Note:** No progressive validation complexity needed. Always run full 110ms validation every 5 minutes.
