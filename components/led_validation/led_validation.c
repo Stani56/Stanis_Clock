@@ -763,18 +763,137 @@ bool attempt_recovery(
 }
 
 // ============================================================================
-// Task Functions (Stubs for now - will implement in Phase 5c)
+// Task Functions
 // ============================================================================
+
+static TaskHandle_t validation_task_handle = NULL;
+static bool task_running = false;
+
+static void validation_task(void *pvParameters)
+{
+    ESP_LOGI(TAG, "Validation task started");
+
+    TickType_t last_wake_time = xTaskGetTickCount();
+
+    while (task_running) {
+        // Check if validation is enabled
+        bool enabled = false;
+        uint16_t interval_sec = 300;
+
+        if (xSemaphoreTake(g_config_mutex, MUTEX_TIMEOUT_TICKS) == pdTRUE) {
+            enabled = g_config.validation_enabled;
+            interval_sec = g_config.validation_interval_sec;
+            xSemaphoreGive(g_config_mutex);
+        }
+
+        if (!enabled) {
+            ESP_LOGD(TAG, "Validation disabled, skipping");
+            vTaskDelay(pdMS_TO_TICKS(60000)); // Check every minute
+            continue;
+        }
+
+        // Get current time for validation
+        wordclock_time_t current_time;
+        if (ds3231_get_time_struct(&current_time) != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to get current time, skipping validation");
+            vTaskDelay(pdMS_TO_TICKS(interval_sec * 1000));
+            continue;
+        }
+
+        // Run validation
+        validation_result_enhanced_t result = validate_display_with_hardware(
+            current_time.hours,
+            current_time.minutes
+        );
+
+        // Classify failure
+        failure_type_t failure = classify_failure(&result);
+
+        // Update statistics
+        if (xSemaphoreTake(g_stats_mutex, MUTEX_TIMEOUT_TICKS) == pdTRUE) {
+            update_statistics(&g_statistics, failure);
+            xSemaphoreGive(g_stats_mutex);
+        }
+
+        // Attempt recovery if needed
+        if (failure != FAILURE_NONE) {
+            bool recovered = attempt_recovery(&result, failure);
+
+            if (!recovered) {
+                // Check if restart is configured
+                bool should_restart = false;
+                if (xSemaphoreTake(g_config_mutex, MUTEX_TIMEOUT_TICKS) == pdTRUE) {
+                    should_restart = should_restart_on_failure(&g_config, failure);
+                    xSemaphoreGive(g_config_mutex);
+                }
+
+                if (should_restart) {
+                    ESP_LOGW(TAG, "Restart configured for %s, restarting in 5s...",
+                             get_failure_type_name(failure));
+                    vTaskDelay(pdMS_TO_TICKS(5000));
+                    esp_restart();
+                }
+            }
+        }
+
+        // Wait for next validation interval
+        vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(interval_sec * 1000));
+    }
+
+    ESP_LOGI(TAG, "Validation task stopped");
+    validation_task_handle = NULL;
+    vTaskDelete(NULL);
+}
 
 esp_err_t start_validation_task(void)
 {
-    // TODO: Implement in Phase 5c
-    ESP_LOGI(TAG, "Validation task start requested (not yet implemented)");
+    if (validation_task_handle != NULL) {
+        ESP_LOGW(TAG, "Validation task already running");
+        return ESP_OK;
+    }
+
+    task_running = true;
+
+    BaseType_t ret = xTaskCreate(
+        validation_task,
+        "led_validation",
+        4096,
+        NULL,
+        5,
+        &validation_task_handle
+    );
+
+    if (ret != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create validation task");
+        task_running = false;
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "Validation task created successfully");
     return ESP_OK;
 }
 
 esp_err_t stop_validation_task(void)
 {
-    // TODO: Implement in Phase 5c
+    if (validation_task_handle == NULL) {
+        return ESP_OK;
+    }
+
+    ESP_LOGI(TAG, "Stopping validation task...");
+    task_running = false;
+
+    // Wait for task to finish
+    int timeout = 10;
+    while (validation_task_handle != NULL && timeout-- > 0) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
+    if (validation_task_handle != NULL) {
+        ESP_LOGW(TAG, "Task did not stop gracefully, deleting");
+        vTaskDelete(validation_task_handle);
+        validation_task_handle = NULL;
+    }
+
+    ESP_LOGI(TAG, "Validation task stopped");
     return ESP_OK;
 }
