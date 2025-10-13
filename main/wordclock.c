@@ -46,6 +46,7 @@
 #include "mqtt_discovery.h"
 #include "thread_safety.h"
 #include "wordclock_mqtt_handlers.h"
+#include "led_validation.h"
 
 static const char *TAG = "wordclock";
 
@@ -214,7 +215,21 @@ static esp_err_t initialize_network(void)
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "MQTT discovery init failed");
     }
-    
+
+    // Initialize LED validation system
+    ret = led_validation_init();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "LED validation init failed - continuing without validation");
+    } else {
+        // Start validation task
+        ret = start_validation_task();
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to start validation task");
+        } else {
+            ESP_LOGI(TAG, "✅ LED validation system started");
+        }
+    }
+
     ESP_LOGI(TAG, "✅ Network initialization complete");
     return ESP_OK;
 }
