@@ -42,6 +42,9 @@ extern "C" {
 #define MQTT_TOPIC_BRIGHTNESS_CONFIG_RESET MQTT_TOPIC_BASE "/brightness/config/reset"
 #define MQTT_TOPIC_BRIGHTNESS_CONFIG_STATUS MQTT_TOPIC_BASE "/brightness/config/status"
 #define MQTT_TOPIC_NTP_LAST_SYNC MQTT_TOPIC_BASE "/ntp/last_sync"
+#define MQTT_TOPIC_VALIDATION_STATUS MQTT_TOPIC_BASE "/validation/status"
+#define MQTT_TOPIC_VALIDATION_LAST_RESULT MQTT_TOPIC_BASE "/validation/last_result"
+#define MQTT_TOPIC_VALIDATION_STATISTICS MQTT_TOPIC_BASE "/validation/statistics"
 
 // MQTT Status Messages
 #define MQTT_STATUS_ONLINE "online"
@@ -89,6 +92,9 @@ esp_err_t mqtt_publish_brightness_config_status(void);
 esp_err_t mqtt_publish_sensor_status(void);
 esp_err_t mqtt_publish_ntp_last_sync(void);
 esp_err_t mqtt_publish_heartbeat_with_ntp(void);
+esp_err_t mqtt_publish_validation_status(const char *result, const char *timestamp, uint32_t execution_time_ms);
+esp_err_t mqtt_publish_validation_last_result(const char *json_payload);
+esp_err_t mqtt_publish_validation_statistics(const char *json_payload);
 
 // Configuration Functions
 esp_err_t mqtt_load_config(mqtt_config_t *config);

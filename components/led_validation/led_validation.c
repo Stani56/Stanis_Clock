@@ -4,6 +4,7 @@
 #include "wordclock_time.h"     // For wordclock_time_t
 #include "thread_safety.h"      // For LED state mutex functions
 #include "transition_manager.h" // For transition_manager_is_active()
+#include "mqtt_manager.h"       // For MQTT publishing
 #include "nvs_flash.h"          // For NVS configuration storage
 #include "nvs.h"
 #include "esp_log.h"
@@ -822,8 +823,9 @@ static void validation_task(void *pvParameters)
         }
 
         // Attempt recovery if needed
+        bool recovered = true;
         if (failure != FAILURE_NONE) {
-            bool recovered = attempt_recovery(&result, failure);
+            recovered = attempt_recovery(&result, failure);
 
             if (!recovered) {
                 // Check if restart is configured
@@ -840,6 +842,55 @@ static void validation_task(void *pvParameters)
                     esp_restart();
                 }
             }
+        }
+
+        // Publish validation results to MQTT
+        {
+            // Get current timestamp
+            time_t now = time(NULL);
+            struct tm timeinfo;
+            localtime_r(&now, &timeinfo);
+            char timestamp[32];
+            strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
+
+            // Publish status
+            const char *result_str = (failure == FAILURE_NONE) ? "passed" : "failed";
+            mqtt_publish_validation_status(result_str, timestamp, result.validation_time_ms);
+
+            // Build and publish detailed result JSON
+            char result_json[512];
+            snprintf(result_json, sizeof(result_json),
+                "{\"software_valid\":%s,\"hardware_valid\":%s,\"hardware_faults\":%s,"
+                "\"mismatches\":%d,\"failure_type\":\"%s\",\"recovery\":\"%s\","
+                "\"software_errors\":%d,\"hardware_read_failures\":%d,\"grppwm_mismatch\":%s}",
+                result.software_valid ? "true" : "false",
+                result.hardware_valid ? "true" : "false",
+                result.hardware_faults_detected ? "true" : "false",
+                result.hardware_mismatch_count,
+                get_failure_type_name(failure),
+                recovered ? "success" : "failed",
+                result.software_errors,
+                result.hardware_read_failures,
+                result.grppwm_mismatch ? "true" : "false");
+            mqtt_publish_validation_last_result(result_json);
+
+            // Build and publish statistics JSON
+            validation_statistics_t stats;
+            get_validation_statistics(&stats);
+            uint8_t health = calculate_validation_health_score(&stats);
+
+            char stats_json[512];
+            snprintf(stats_json, sizeof(stats_json),
+                "{\"total_validations\":%" PRIu32 ",\"failed\":%" PRIu32 ",\"health_score\":%d,"
+                "\"consecutive_failures\":%d,\"recovery_attempts\":%" PRIu32 ",\"recovery_successes\":%" PRIu32 ","
+                "\"hardware_faults\":%" PRIu32 ",\"i2c_failures\":%" PRIu32 ",\"systematic_mismatches\":%" PRIu32 ","
+                "\"partial_mismatches\":%" PRIu32 ",\"grppwm_mismatches\":%" PRIu32 ",\"software_errors\":%" PRIu32 "}",
+                stats.total_validations, stats.validations_failed, health,
+                stats.consecutive_failures, stats.recovery_attempts, stats.recovery_successes,
+                stats.hardware_fault_count, stats.i2c_bus_failure_count,
+                stats.systematic_mismatch_count, stats.partial_mismatch_count,
+                stats.grppwm_mismatch_count, stats.software_error_count);
+            mqtt_publish_validation_statistics(stats_json);
         }
 
         // Wait for next validation interval

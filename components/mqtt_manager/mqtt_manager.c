@@ -1773,6 +1773,53 @@ esp_err_t mqtt_publish_heartbeat_with_ntp(void) {
     return ret;
 }
 
+esp_err_t mqtt_publish_validation_status(const char *result, const char *timestamp, uint32_t execution_time_ms) {
+    if (!thread_safe_get_mqtt_connected()) return ESP_ERR_INVALID_STATE;
+
+    // Create JSON status
+    cJSON *status = cJSON_CreateObject();
+    cJSON_AddStringToObject(status, "result", result);
+    cJSON_AddStringToObject(status, "timestamp", timestamp);
+    cJSON_AddNumberToObject(status, "execution_time_ms", execution_time_ms);
+
+    // Convert to string and publish
+    char *status_str = cJSON_Print(status);
+    esp_err_t ret = ESP_FAIL;
+    if (status_str) {
+        int msg_id = esp_mqtt_client_publish(mqtt_client, MQTT_TOPIC_VALIDATION_STATUS, status_str, 0, 1, true);
+        if (msg_id != -1) {
+            ESP_LOGI(TAG, "📤 Published validation status: %s (%" PRIu32 " ms)", result, execution_time_ms);
+            ret = ESP_OK;
+        }
+        free(status_str);
+    }
+    cJSON_Delete(status);
+
+    return ret;
+}
+
+esp_err_t mqtt_publish_validation_last_result(const char *json_payload) {
+    if (!thread_safe_get_mqtt_connected()) return ESP_ERR_INVALID_STATE;
+
+    int msg_id = esp_mqtt_client_publish(mqtt_client, MQTT_TOPIC_VALIDATION_LAST_RESULT, json_payload, 0, 1, true);
+    if (msg_id != -1) {
+        ESP_LOGI(TAG, "📤 Published validation last result");
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
+
+esp_err_t mqtt_publish_validation_statistics(const char *json_payload) {
+    if (!thread_safe_get_mqtt_connected()) return ESP_ERR_INVALID_STATE;
+
+    int msg_id = esp_mqtt_client_publish(mqtt_client, MQTT_TOPIC_VALIDATION_STATISTICS, json_payload, 0, 1, true);
+    if (msg_id != -1) {
+        ESP_LOGI(TAG, "📤 Published validation statistics");
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
+
 esp_err_t mqtt_publish_wifi_status(bool connected) {
     if (!thread_safe_get_mqtt_connected()) return ESP_ERR_INVALID_STATE;
     
