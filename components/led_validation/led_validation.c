@@ -3,6 +3,8 @@
 #include "wordclock_display.h"  // For build_led_state_matrix() and led_state[]
 #include "wordclock_time.h"     // For wordclock_time_t
 #include "thread_safety.h"      // For LED state mutex functions
+#include "nvs_flash.h"          // For NVS configuration storage
+#include "nvs.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -10,6 +12,13 @@
 #include <sys/time.h>
 
 static const char *TAG = "led_validation";
+
+// NVS namespace and keys
+#define NVS_NAMESPACE "led_valid"
+#define NVS_KEY_CONFIG "config"
+#define NVS_KEY_VERSION "version"
+#define NVS_KEY_RESTART_COUNTER "restart_cnt"
+#define CURRENT_CONFIG_VERSION 1
 
 // Global statistics (thread-safe access through functions)
 static validation_statistics_t g_statistics = {0};
@@ -335,7 +344,7 @@ bool should_restart_on_failure(
 }
 
 // ============================================================================
-// Configuration Functions (Stubs for now - will implement in Phase 3a)
+// Configuration Functions
 // ============================================================================
 
 void get_default_validation_config(validation_config_t *config)
@@ -356,24 +365,152 @@ void get_default_validation_config(validation_config_t *config)
 
 esp_err_t load_validation_config(validation_config_t *config)
 {
-    // TODO: Implement NVS load in Phase 3a
-    // For now, just return error to trigger defaults
-    return ESP_ERR_NOT_FOUND;
+    if (config == NULL) {
+        ESP_LOGE(TAG, "Config pointer is NULL");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    nvs_handle_t nvs_handle;
+    esp_err_t ret;
+
+    ESP_LOGI(TAG, "Loading validation configuration from NVS");
+
+    ret = nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "NVS namespace not found, will use defaults");
+        return ret;
+    }
+
+    // Check version
+    uint32_t version = 0;
+    ret = nvs_get_u32(nvs_handle, NVS_KEY_VERSION, &version);
+    if (ret != ESP_OK || version != CURRENT_CONFIG_VERSION) {
+        ESP_LOGW(TAG, "Invalid or missing version, will use defaults");
+        nvs_close(nvs_handle);
+        return ESP_ERR_INVALID_VERSION;
+    }
+
+    // Load configuration as blob
+    size_t length = sizeof(validation_config_t);
+    ret = nvs_get_blob(nvs_handle, NVS_KEY_CONFIG, config, &length);
+    if (ret != ESP_OK || length != sizeof(validation_config_t)) {
+        ESP_LOGW(TAG, "Failed to load validation config: %s", esp_err_to_name(ret));
+        nvs_close(nvs_handle);
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "Validation configuration loaded from NVS successfully");
+    nvs_close(nvs_handle);
+    return ESP_OK;
 }
 
 esp_err_t save_validation_config(const validation_config_t *config)
 {
-    // TODO: Implement NVS save in Phase 3a
-    return ESP_OK;
+    if (config == NULL) {
+        ESP_LOGE(TAG, "Config pointer is NULL");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    nvs_handle_t nvs_handle;
+    esp_err_t ret;
+
+    ESP_LOGI(TAG, "Saving validation configuration to NVS");
+
+    ret = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open NVS namespace: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    // Save version
+    uint32_t version = CURRENT_CONFIG_VERSION;
+    ret = nvs_set_u32(nvs_handle, NVS_KEY_VERSION, version);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to save version: %s", esp_err_to_name(ret));
+        nvs_close(nvs_handle);
+        return ret;
+    }
+
+    // Save configuration as blob
+    ret = nvs_set_blob(nvs_handle, NVS_KEY_CONFIG, config, sizeof(validation_config_t));
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to save validation config: %s", esp_err_to_name(ret));
+        nvs_close(nvs_handle);
+        return ret;
+    }
+
+    // Commit changes
+    ret = nvs_commit(nvs_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to commit NVS changes: %s", esp_err_to_name(ret));
+    } else {
+        ESP_LOGI(TAG, "Validation configuration saved to NVS successfully");
+    }
+
+    nvs_close(nvs_handle);
+    return ret;
 }
 
 // ============================================================================
-// Statistics Functions (Stubs for now - will implement in Phase 3b)
+// Statistics Functions
 // ============================================================================
 
 void update_statistics(validation_statistics_t *stats, failure_type_t failure)
 {
-    // TODO: Implement in Phase 3b
+    if (stats == NULL) {
+        return;
+    }
+
+    // Always increment total validations
+    stats->total_validations++;
+
+    if (failure == FAILURE_NONE) {
+        // Validation passed, reset consecutive failures
+        stats->consecutive_failures = 0;
+        return;
+    }
+
+    // Validation failed
+    stats->validations_failed++;
+    stats->consecutive_failures++;
+
+    // Update max consecutive failures
+    if (stats->consecutive_failures > stats->max_consecutive_failures) {
+        stats->max_consecutive_failures = stats->consecutive_failures;
+    }
+
+    // Update failure counters by type
+    switch (failure) {
+        case FAILURE_HARDWARE_FAULT:
+            stats->hardware_fault_count++;
+            break;
+        case FAILURE_I2C_BUS_FAILURE:
+            stats->i2c_bus_failure_count++;
+            break;
+        case FAILURE_SYSTEMATIC_MISMATCH:
+            stats->systematic_mismatch_count++;
+            break;
+        case FAILURE_PARTIAL_MISMATCH:
+            stats->partial_mismatch_count++;
+            break;
+        case FAILURE_GRPPWM_MISMATCH:
+            stats->grppwm_mismatch_count++;
+            break;
+        case FAILURE_SOFTWARE_ERROR:
+            stats->software_error_count++;
+            break;
+        default:
+            break;
+    }
+
+    // Update last failure time
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    stats->last_failure_time = tv.tv_sec;
+
+    // Update 24-hour failure count
+    // Simple approach: increment counter (could be refined with time-based window)
+    stats->failures_last_24h++;
 }
 
 void get_validation_statistics(validation_statistics_t *stats)
@@ -390,8 +527,53 @@ void get_validation_statistics(validation_statistics_t *stats)
 
 uint8_t calculate_validation_health_score(const validation_statistics_t *stats)
 {
-    // TODO: Implement in Phase 3c
-    return 100; // Perfect score for now
+    if (stats == NULL) {
+        return 100;
+    }
+
+    int32_t score = 100;  // Start with perfect score
+
+    // Deduct points for failures in last 24 hours
+    // CRITICAL failures: -10 points each
+    uint32_t critical_failures_24h = 0;
+    if (stats->hardware_fault_count > 0) critical_failures_24h++;
+    if (stats->i2c_bus_failure_count > 0) critical_failures_24h++;
+    score -= (critical_failures_24h * 10);
+
+    // HIGH severity: -5 points each
+    score -= (stats->systematic_mismatch_count > 0) ? 5 : 0;
+
+    // MEDIUM severity: -2 points each
+    uint32_t medium_failures = stats->partial_mismatch_count + stats->grppwm_mismatch_count;
+    score -= (medium_failures * 2);
+
+    // LOW severity: -1 point each
+    score -= (stats->software_error_count > 0) ? 1 : 0;
+
+    // Recovery failure rate penalty: -20 if >10% failures
+    if (stats->recovery_attempts > 0) {
+        float recovery_failure_rate = (float)stats->recovery_failures / stats->recovery_attempts;
+        if (recovery_failure_rate > 0.1f) {
+            score -= 20;
+        }
+    }
+
+    // Consecutive failures penalty: -5 per consecutive failure
+    score -= (stats->consecutive_failures * 5);
+
+    // Overall failure rate penalty (if > 5%)
+    if (stats->total_validations > 0) {
+        float failure_rate = (float)stats->validations_failed / stats->total_validations;
+        if (failure_rate > 0.05f) {
+            score -= 10;
+        }
+    }
+
+    // Clamp score to 0-100
+    if (score < 0) score = 0;
+    if (score > 100) score = 100;
+
+    return (uint8_t)score;
 }
 
 // ============================================================================
