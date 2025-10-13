@@ -158,13 +158,15 @@ validation_result_enhanced_t validate_display_with_hardware(
                         result.hardware_mismatch_count++;
 
                         // Record mismatch
+                        // Note: For hardware validation, we only care if hardware matches
+                        // what software wrote, not what the current time says it should be
                         if (result.hardware_mismatch_count <= 50) {
                             led_mismatch_t *mismatch = &result.mismatches[result.hardware_mismatch_count - 1];
                             mismatch->row = row;
                             mismatch->col = col;
-                            mismatch->expected = expected_bitmap[row][col];
-                            mismatch->software = led_state[row][col];
-                            mismatch->hardware = hardware_pwm[row][col];
+                            mismatch->expected = led_state[row][col];  // What software wrote
+                            mismatch->software = led_state[row][col];   // Same (for consistency)
+                            mismatch->hardware = hardware_pwm[row][col]; // What hardware has
                         }
                     }
                 }
