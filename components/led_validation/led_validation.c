@@ -773,8 +773,6 @@ static void validation_task(void *pvParameters)
 {
     ESP_LOGI(TAG, "Validation task started");
 
-    TickType_t last_wake_time = xTaskGetTickCount();
-
     while (task_running) {
         // Check if validation is enabled
         bool enabled = false;
@@ -837,7 +835,8 @@ static void validation_task(void *pvParameters)
         }
 
         // Wait for next validation interval
-        vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(interval_sec * 1000));
+        ESP_LOGD(TAG, "Next validation in %d seconds", interval_sec);
+        vTaskDelay(pdMS_TO_TICKS(interval_sec * 1000));
     }
 
     ESP_LOGI(TAG, "Validation task stopped");
