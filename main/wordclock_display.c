@@ -23,6 +23,10 @@ uint8_t led_state[WORDCLOCK_ROWS][WORDCLOCK_COLS] = {0};
 // Track failed device rows to reduce logging spam
 static bool device_row_failed[WORDCLOCK_ROWS] = {false};
 
+// Display update coordination for validation
+static uint32_t last_display_update_time_ms = 0;
+static bool display_update_in_progress = false;
+
 // Complete German word layout for the word clock
 static const word_definition_t word_database[] = {
     // Row 0: E S • I S T • F Ü N F • [●][●][●][●]
@@ -261,13 +265,17 @@ esp_err_t display_german_time(const wordclock_time_t *time)
         return ESP_ERR_INVALID_ARG;
     }
 
-    ESP_LOGI(TAG, "Displaying time: %02d:%02d:%02d", 
+    // Mark display update as in progress
+    display_update_in_progress = true;
+
+    ESP_LOGI(TAG, "Displaying time: %02d:%02d:%02d",
              time->hours, time->minutes, time->seconds);
 
     // Build new LED state
     uint8_t new_led_state[WORDCLOCK_ROWS][WORDCLOCK_COLS] = {0};
     esp_err_t ret = build_led_state_matrix(time, new_led_state);
     if (ret != ESP_OK) {
+        display_update_in_progress = false;
         return ret;
     }
 
@@ -280,13 +288,17 @@ esp_err_t display_german_time(const wordclock_time_t *time)
                 if (ret == ESP_OK) {
                     changes_made++;
                 } else if (!device_row_failed[row]) {
-                    ESP_LOGW(TAG, "Failed to update LED at (%d,%d): %s", 
+                    ESP_LOGW(TAG, "Failed to update LED at (%d,%d): %s",
                              row, col, esp_err_to_name(ret));
                     device_row_failed[row] = true;
                 }
             }
         }
     }
+
+    // Record timestamp of this update
+    last_display_update_time_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+    display_update_in_progress = false;
 
     ESP_LOGI(TAG, "Display update complete: %d LED changes", changes_made);
     return ESP_OK;
@@ -364,7 +376,23 @@ void display_test_time(void)
         .month = 1,
         .year = 24
     };
-    
+
     ESP_LOGI(TAG, "Displaying test time: 14:30 (HALB DREI)");
     display_german_time(&test_time);
+}
+
+/**
+ * @brief Get timestamp of last display update (for validation coordination)
+ */
+uint32_t get_last_display_update_time_ms(void)
+{
+    return last_display_update_time_ms;
+}
+
+/**
+ * @brief Check if display update is currently in progress
+ */
+bool is_display_update_in_progress(void)
+{
+    return display_update_in_progress;
 }

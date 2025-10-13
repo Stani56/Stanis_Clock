@@ -43,6 +43,10 @@ void set_minute_indicators(uint8_t led_state[WORDCLOCK_ROWS][WORDCLOCK_COLS], ui
 void test_german_time_display(void);
 void display_test_time(void);
 
+// Display update coordination for validation
+uint32_t get_last_display_update_time_ms(void);
+bool is_display_update_in_progress(void);
+
 #ifdef __cplusplus
 }
 #endif

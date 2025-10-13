@@ -31,6 +31,130 @@ static validation_config_t g_config = {0};
 static SemaphoreHandle_t g_config_mutex = NULL;
 
 // ============================================================================
+// Diagnostic Test
+// ============================================================================
+
+esp_err_t tlc_diagnostic_test(void)
+{
+    ESP_LOGI(TAG, "=== TLC DIAGNOSTIC TEST START ===");
+    ESP_LOGI(TAG, "Testing suspicious TLC devices: rows 0, 1, 3, 4");
+
+    // Test rows that show frequent mismatches
+    const uint8_t test_rows[] = {0, 1, 3, 4};
+    const uint8_t test_row_count = 4;
+
+    // Test pattern: write specific values and read them back
+    const uint8_t test_pattern1 = 85;   // 0b01010101
+    const uint8_t test_pattern2 = 170;  // 0b10101010
+
+    bool all_tests_passed = true;
+
+    for (uint8_t i = 0; i < test_row_count; i++) {
+        uint8_t row = test_rows[i];
+        ESP_LOGI(TAG, "--- Testing TLC device row %d (address 0x%02X) ---",
+                 row, tlc_addresses[row]);
+
+        // Test 1: Write pattern 1 to all columns
+        ESP_LOGI(TAG, "Test 1: Writing pattern %d to all columns", test_pattern1);
+        for (uint8_t col = 0; col < 16; col++) {
+            esp_err_t ret = tlc_set_matrix_led(row, col, test_pattern1);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "  ❌ WRITE FAILED at [%d][%d]", row, col);
+                all_tests_passed = false;
+            }
+            vTaskDelay(pdMS_TO_TICKS(2));  // Small delay between writes
+        }
+
+        // Wait for writes to complete
+        vTaskDelay(pdMS_TO_TICKS(50));
+
+        // Read back pattern 1
+        uint8_t readback[16];
+        esp_err_t ret = tlc_read_pwm_values(row, readback);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "  ❌ READBACK FAILED for row %d", row);
+            all_tests_passed = false;
+            continue;
+        }
+
+        // Verify pattern 1
+        uint8_t mismatches_p1 = 0;
+        for (uint8_t col = 0; col < 16; col++) {
+            if (readback[col] != test_pattern1) {
+                ESP_LOGW(TAG, "  ⚠️  [%d][%d] wrote %d, read %d (diff: %d)",
+                         row, col, test_pattern1, readback[col],
+                         abs((int)readback[col] - (int)test_pattern1));
+                mismatches_p1++;
+                all_tests_passed = false;
+            }
+        }
+
+        if (mismatches_p1 == 0) {
+            ESP_LOGI(TAG, "  ✅ Pattern 1 readback: ALL 16 columns CORRECT");
+        } else {
+            ESP_LOGE(TAG, "  ❌ Pattern 1 readback: %d mismatches detected", mismatches_p1);
+        }
+
+        // Test 2: Write pattern 2 to all columns
+        ESP_LOGI(TAG, "Test 2: Writing pattern %d to all columns", test_pattern2);
+        for (uint8_t col = 0; col < 16; col++) {
+            ret = tlc_set_matrix_led(row, col, test_pattern2);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "  ❌ WRITE FAILED at [%d][%d]", row, col);
+                all_tests_passed = false;
+            }
+            vTaskDelay(pdMS_TO_TICKS(2));
+        }
+
+        // Wait for writes to complete
+        vTaskDelay(pdMS_TO_TICKS(50));
+
+        // Read back pattern 2
+        ret = tlc_read_pwm_values(row, readback);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "  ❌ READBACK FAILED for row %d", row);
+            all_tests_passed = false;
+            continue;
+        }
+
+        // Verify pattern 2
+        uint8_t mismatches_p2 = 0;
+        for (uint8_t col = 0; col < 16; col++) {
+            if (readback[col] != test_pattern2) {
+                ESP_LOGW(TAG, "  ⚠️  [%d][%d] wrote %d, read %d (diff: %d)",
+                         row, col, test_pattern2, readback[col],
+                         abs((int)readback[col] - (int)test_pattern2));
+                mismatches_p2++;
+                all_tests_passed = false;
+            }
+        }
+
+        if (mismatches_p2 == 0) {
+            ESP_LOGI(TAG, "  ✅ Pattern 2 readback: ALL 16 columns CORRECT");
+        } else {
+            ESP_LOGE(TAG, "  ❌ Pattern 2 readback: %d mismatches detected", mismatches_p2);
+        }
+
+        // Clear the row
+        for (uint8_t col = 0; col < 16; col++) {
+            tlc_set_matrix_led(row, col, 0);
+            vTaskDelay(pdMS_TO_TICKS(2));
+        }
+
+        ESP_LOGI(TAG, "");  // Blank line for readability
+    }
+
+    if (all_tests_passed) {
+        ESP_LOGI(TAG, "=== TLC DIAGNOSTIC TEST: ✅ ALL TESTS PASSED ===");
+        return ESP_OK;
+    } else {
+        ESP_LOGE(TAG, "=== TLC DIAGNOSTIC TEST: ❌ SOME TESTS FAILED ===");
+        ESP_LOGE(TAG, "Hardware readback issues detected - validation may report false positives");
+        return ESP_FAIL;
+    }
+}
+
+// ============================================================================
 // Initialization
 // ============================================================================
 
@@ -801,10 +925,18 @@ static void validation_task(void *pvParameters)
             continue;
         }
 
-        // Add stabilization delay to ensure all LED writes are complete
-        // Transitions may have just finished, hardware needs time to settle
-        ESP_LOGD(TAG, "Waiting 500ms for display to stabilize");
-        vTaskDelay(pdMS_TO_TICKS(500));
+        // Check if display update is in progress
+        if (is_display_update_in_progress()) {
+            ESP_LOGD(TAG, "Display update in progress, postponing validation by 2 seconds");
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            continue;
+        }
+
+        // Wait for I2C bus to stabilize
+        // The I2C mutex will ensure we don't read during writes, but we still
+        // need a small delay to ensure TLC59116 internal registers have settled
+        ESP_LOGD(TAG, "Waiting 200ms for TLC59116 registers to stabilize");
+        vTaskDelay(pdMS_TO_TICKS(200));
 
         // Get current time for validation
         wordclock_time_t current_time;
@@ -814,7 +946,7 @@ static void validation_task(void *pvParameters)
             continue;
         }
 
-        // Run validation
+        // Run validation - I2C mutex protection will ensure atomic readback
         validation_result_enhanced_t result = validate_display_with_hardware(
             current_time.hours,
             current_time.minutes
@@ -830,24 +962,31 @@ static void validation_task(void *pvParameters)
         }
 
         // Attempt recovery if needed
+        // DISABLED: Recovery for LED mismatches causes more problems than it solves
+        // Only recover for actual I2C bus failures
         bool recovered = true;
-        if (failure != FAILURE_NONE) {
+        if (failure == FAILURE_I2C_BUS_FAILURE) {
             recovered = attempt_recovery(&result, failure);
+        } else if (failure != FAILURE_NONE) {
+            // Just log the failure, don't attempt recovery
+            ESP_LOGW(TAG, "Validation failed: %s (recovery disabled for this failure type)",
+                     get_failure_type_name(failure));
+            recovered = false;  // Mark as not recovered so we track it in statistics
+        }
 
-            if (!recovered) {
-                // Check if restart is configured
-                bool should_restart = false;
-                if (xSemaphoreTake(g_config_mutex, MUTEX_TIMEOUT_TICKS) == pdTRUE) {
-                    should_restart = should_restart_on_failure(&g_config, failure);
-                    xSemaphoreGive(g_config_mutex);
-                }
+        if (!recovered) {
+            // Check if restart is configured
+            bool should_restart = false;
+            if (xSemaphoreTake(g_config_mutex, MUTEX_TIMEOUT_TICKS) == pdTRUE) {
+                should_restart = should_restart_on_failure(&g_config, failure);
+                xSemaphoreGive(g_config_mutex);
+            }
 
-                if (should_restart) {
-                    ESP_LOGW(TAG, "Restart configured for %s, restarting in 5s...",
-                             get_failure_type_name(failure));
-                    vTaskDelay(pdMS_TO_TICKS(5000));
-                    esp_restart();
-                }
+            if (should_restart) {
+                ESP_LOGW(TAG, "Restart configured for %s, restarting in 5s...",
+                         get_failure_type_name(failure));
+                vTaskDelay(pdMS_TO_TICKS(5000));
+                esp_restart();
             }
         }
 
@@ -988,5 +1127,117 @@ esp_err_t stop_validation_task(void)
     }
 
     ESP_LOGI(TAG, "Validation task stopped");
+    return ESP_OK;
+}
+
+esp_err_t trigger_validation_post_transition(void)
+{
+    // Check if validation is enabled
+    bool enabled = false;
+    if (xSemaphoreTake(g_config_mutex, MUTEX_TIMEOUT_TICKS) == pdTRUE) {
+        enabled = g_config.validation_enabled;
+        xSemaphoreGive(g_config_mutex);
+    }
+
+    if (!enabled) {
+        ESP_LOGD(TAG, "Post-transition validation skipped (disabled)");
+        return ESP_OK;
+    }
+
+    ESP_LOGI(TAG, "=== POST-TRANSITION VALIDATION TRIGGERED ===");
+
+    // Get current time for validation
+    wordclock_time_t current_time;
+    if (ds3231_get_time_struct(&current_time) != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to get current time for post-transition validation");
+        return ESP_FAIL;
+    }
+
+    // CRITICAL: No delay needed! Transitions just wrote all LEDs sequentially,
+    // so auto-increment pointer is in a known state. Read immediately.
+    ESP_LOGI(TAG, "Validating time: %02d:%02d (auto-increment pointer fresh from transition)",
+             current_time.hours, current_time.minutes);
+
+    // Run validation - I2C mutex protection ensures atomic readback
+    validation_result_enhanced_t result = validate_display_with_hardware(
+        current_time.hours,
+        current_time.minutes
+    );
+
+    // Classify failure
+    failure_type_t failure = classify_failure(&result);
+
+    // Update statistics
+    if (xSemaphoreTake(g_stats_mutex, MUTEX_TIMEOUT_TICKS) == pdTRUE) {
+        update_statistics(&g_statistics, failure);
+        xSemaphoreGive(g_stats_mutex);
+    }
+
+    // Log detailed results if validation failed
+    if (failure != FAILURE_NONE) {
+        ESP_LOGW(TAG, "Post-transition validation FAILED: %s", get_failure_type_name(failure));
+        ESP_LOGW(TAG, "  Software errors: %d", result.software_errors);
+        ESP_LOGW(TAG, "  Hardware mismatches: %d", result.hardware_mismatch_count);
+        ESP_LOGW(TAG, "  Hardware read failures: %d", result.hardware_read_failures);
+
+        // Log first few mismatches
+        uint8_t log_count = (result.hardware_mismatch_count < 10) ? result.hardware_mismatch_count : 10;
+        for (uint8_t i = 0; i < log_count; i++) {
+            const led_mismatch_t *m = &result.mismatches[i];
+            ESP_LOGW(TAG, "    [%d][%d] expected=%d software=%d hardware=%d",
+                     m->row, m->col, m->expected, m->software, m->hardware);
+        }
+    } else {
+        ESP_LOGI(TAG, "✅ Post-transition validation PASSED");
+    }
+
+    // Publish validation results to MQTT (same as periodic validation)
+    {
+        time_t now = time(NULL);
+        struct tm timeinfo;
+        localtime_r(&now, &timeinfo);
+        char timestamp[32];
+        strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
+
+        const char *result_str = (failure == FAILURE_NONE) ? "passed" : "failed";
+        mqtt_publish_validation_status(result_str, timestamp, result.validation_time_ms);
+
+        // Build and publish detailed result JSON
+        char result_json[512];
+        snprintf(result_json, sizeof(result_json),
+            "{\"software_valid\":%s,\"hardware_valid\":%s,\"hardware_faults\":%s,"
+            "\"mismatches\":%d,\"failure_type\":\"%s\","
+            "\"software_errors\":%d,\"hardware_read_failures\":%d,\"grppwm_mismatch\":%s,"
+            "\"validation_type\":\"post_transition\"}",
+            result.software_valid ? "true" : "false",
+            result.hardware_valid ? "true" : "false",
+            result.hardware_faults_detected ? "true" : "false",
+            result.hardware_mismatch_count,
+            get_failure_type_name(failure),
+            result.software_errors,
+            result.hardware_read_failures,
+            result.grppwm_mismatch ? "true" : "false");
+        mqtt_publish_validation_last_result(result_json);
+
+        // Publish statistics
+        validation_statistics_t stats;
+        get_validation_statistics(&stats);
+        uint8_t health = calculate_validation_health_score(&stats);
+
+        char stats_json[512];
+        snprintf(stats_json, sizeof(stats_json),
+            "{\"total_validations\":%" PRIu32 ",\"failed\":%" PRIu32 ",\"health_score\":%d,"
+            "\"consecutive_failures\":%d,\"recovery_attempts\":%" PRIu32 ",\"recovery_successes\":%" PRIu32 ","
+            "\"hardware_faults\":%" PRIu32 ",\"i2c_failures\":%" PRIu32 ",\"systematic_mismatches\":%" PRIu32 ","
+            "\"partial_mismatches\":%" PRIu32 ",\"grppwm_mismatches\":%" PRIu32 ",\"software_errors\":%" PRIu32 "}",
+            stats.total_validations, stats.validations_failed, health,
+            stats.consecutive_failures, stats.recovery_attempts, stats.recovery_successes,
+            stats.hardware_fault_count, stats.i2c_bus_failure_count,
+            stats.systematic_mismatch_count, stats.partial_mismatch_count,
+            stats.grppwm_mismatch_count, stats.software_error_count);
+        mqtt_publish_validation_statistics(stats_json);
+    }
+
+    ESP_LOGI(TAG, "=== POST-TRANSITION VALIDATION COMPLETE ===");
     return ESP_OK;
 }

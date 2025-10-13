@@ -125,6 +125,16 @@ typedef struct {
 // ============================================================================
 
 /**
+ * @brief Run diagnostic test on suspicious TLC devices at startup
+ *
+ * Tests write/readback on TLC devices that show frequent validation mismatches
+ * (rows 0, 1, 3, 4 = addresses 0x60, 0x61, 0x63, 0x64)
+ *
+ * @return esp_err_t ESP_OK if all tests pass, ESP_FAIL if readback issues detected
+ */
+esp_err_t tlc_diagnostic_test(void);
+
+/**
  * @brief Initialize LED validation system
  *
  * Loads configuration from NVS, initializes statistics
@@ -281,6 +291,23 @@ esp_err_t start_validation_task(void);
  * @return esp_err_t ESP_OK on success
  */
 esp_err_t stop_validation_task(void);
+
+/**
+ * @brief Trigger validation immediately after transition completes
+ *
+ * This function should be called right after sync_led_state_after_transitions().
+ * It validates hardware PWM state when auto-increment pointer is fresh from
+ * sequential transition writes, providing most reliable readback.
+ *
+ * Benefits of post-transition validation:
+ * - Auto-increment pointer in known state (just wrote all LEDs sequentially)
+ * - Display stable for ~5 minutes until next time change
+ * - Current time and brightness are known
+ * - Can detect both incorrect active LEDs AND accidentally lit unused LEDs
+ *
+ * @return esp_err_t ESP_OK if validation triggered successfully
+ */
+esp_err_t trigger_validation_post_transition(void);
 
 // ============================================================================
 // Utility Functions

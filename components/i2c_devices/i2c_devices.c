@@ -2,6 +2,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "thread_safety.h"
 #include <string.h>
 
 static const char *TAG = "i2c_devices";
@@ -359,30 +360,38 @@ esp_err_t tlc_set_pwm(uint8_t tlc_index, uint8_t channel, uint8_t pwm_value)
         ESP_LOGE(TAG, "Invalid TLC index: %d", tlc_index);
         return ESP_ERR_INVALID_ARG;
     }
-    
+
     if (channel >= TLC59116_CHANNELS) {
         ESP_LOGE(TAG, "Invalid channel: %d", channel);
         return ESP_ERR_INVALID_ARG;
     }
-    
+
     if (!tlc_devices[tlc_index].initialized || tlc_dev_handles[tlc_index] == NULL) {
         // Silently skip uninitialized devices to avoid spam
         return ESP_ERR_INVALID_STATE;
     }
-    
+
+    // Lock I2C bus for atomic write operation
+    if (thread_safe_i2c_lock(MUTEX_TIMEOUT_TICKS) != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to acquire I2C mutex for PWM write");
+        return ESP_ERR_TIMEOUT;
+    }
+
     // DEBUG: Log PWM writes when needed (can be commented out for production)
     // ESP_LOGD(TAG, "TLC PWM: device[%d] channel[%d] = %d", tlc_index, channel, pwm_value);
-    
+
     // Use device handle directly - no lookup needed
     uint8_t write_buffer[2] = {TLC59116_PWM0 + channel, pwm_value};
     esp_err_t ret = i2c_master_transmit(tlc_dev_handles[tlc_index], write_buffer, sizeof(write_buffer), pdMS_TO_TICKS(1000));
-    
+
     if (ret == ESP_OK) {
         tlc_devices[tlc_index].pwm_values[channel] = pwm_value;
         // Add small delay to ensure I2C timing stability and prevent brightness jumps
         vTaskDelay(pdMS_TO_TICKS(1));
     }
-    
+
+    thread_safe_i2c_unlock();
+
     return ret;
 }
 
@@ -390,35 +399,43 @@ esp_err_t tlc_set_global_brightness(uint8_t brightness)
 {
     // DEBUG: Track global brightness changes when needed
     ESP_LOGD(TAG, "Global brightness change: %d → %d", current_global_brightness, brightness);
-    
+
+    // Lock I2C bus for atomic brightness update across all devices
+    if (thread_safe_i2c_lock(MUTEX_TIMEOUT_TICKS) != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to acquire I2C mutex for global brightness");
+        return ESP_ERR_TIMEOUT;
+    }
+
     esp_err_t ret = ESP_OK;
     int success_count = 0;
-    
+
     for (int i = 0; i < TLC59116_COUNT; i++) {
         if (!tlc_devices[i].initialized || tlc_dev_handles[i] == NULL) {
             continue;
         }
-        
+
         // Use device handle directly
         uint8_t write_buffer[2] = {TLC59116_GRPPWM, brightness};
         esp_err_t device_ret = i2c_master_transmit(tlc_dev_handles[i], write_buffer, sizeof(write_buffer), pdMS_TO_TICKS(1000));
-        
+
         if (device_ret == ESP_OK) {
             success_count++;
         } else {
-            ESP_LOGW(TAG, "Failed to set global brightness for TLC59116 device %d: %s", 
+            ESP_LOGW(TAG, "Failed to set global brightness for TLC59116 device %d: %s",
                      i, esp_err_to_name(device_ret));
             ret = device_ret;
         }
     }
-    
+
+    thread_safe_i2c_unlock();
+
     ESP_LOGI(TAG, "Global brightness set to %d for %d devices", brightness, success_count);
-    
+
     // Update global tracking variable only if at least one device succeeded
     if (success_count > 0) {
         current_global_brightness = brightness;
     }
-    
+
     return (success_count > 0) ? ESP_OK : ret;
 }
 
@@ -617,20 +634,29 @@ esp_err_t ds3231_get_time_struct(wordclock_time_t *time)
         ESP_LOGE(TAG, "Time structure is NULL");
         return ESP_ERR_INVALID_ARG;
     }
-    
+
     if (ds3231_dev_handle == NULL) {
         ESP_LOGE(TAG, "DS3231 device handle not available");
         return ESP_ERR_INVALID_STATE;
     }
-    
+
+    // Lock I2C bus for RTC read
+    if (thread_safe_i2c_lock(MUTEX_TIMEOUT_TICKS) != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to acquire I2C mutex for RTC read");
+        return ESP_ERR_TIMEOUT;
+    }
+
     uint8_t time_data[7];
     uint8_t reg_addr = DS3231_REG_SECONDS;
     esp_err_t ret = i2c_master_transmit_receive(ds3231_dev_handle, &reg_addr, 1, time_data, 7, pdMS_TO_TICKS(1000));
+
+    thread_safe_i2c_unlock();
+
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to read time from DS3231: %s", esp_err_to_name(ret));
         return ret;
     }
-    
+
     // Convert BCD to binary
     time->seconds = bcd_to_bin(time_data[0] & 0x7F);  // Mask out CH bit
     time->minutes = bcd_to_bin(time_data[1] & 0x7F);  // Mask out unused bits
@@ -638,7 +664,7 @@ esp_err_t ds3231_get_time_struct(wordclock_time_t *time)
     time->day = bcd_to_bin(time_data[4] & 0x3F);      // Mask out unused bits
     time->month = bcd_to_bin(time_data[5] & 0x1F);    // Mask out century bit
     time->year = bcd_to_bin(time_data[6]);
-    
+
     return ESP_OK;
 }
 
@@ -748,7 +774,17 @@ esp_err_t bh1750_read_data(uint8_t *data, size_t len)
         return ESP_ERR_INVALID_STATE;
     }
 
-    return i2c_master_receive(bh1750_dev_handle, data, len, pdMS_TO_TICKS(1000));
+    // Lock I2C bus for light sensor read
+    if (thread_safe_i2c_lock(MUTEX_TIMEOUT_TICKS) != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to acquire I2C mutex for light sensor read");
+        return ESP_ERR_TIMEOUT;
+    }
+
+    esp_err_t ret = i2c_master_receive(bh1750_dev_handle, data, len, pdMS_TO_TICKS(1000));
+
+    thread_safe_i2c_unlock();
+
+    return ret;
 }
 
 // ============================================================================
@@ -774,8 +810,7 @@ esp_err_t tlc_read_pwm_values(uint8_t tlc_index, uint8_t pwm_values[16])
 
     uint8_t device_addr = tlc_addresses[tlc_index];
 
-    // Read all 16 PWM registers (0x02-0x11) in one transaction
-    // Auto-increment mode should be enabled during init
+    // Read all 16 PWM registers in sequence
     esp_err_t ret = i2c_read_bytes(
         I2C_LEDS_MASTER_PORT,
         device_addr,
@@ -799,6 +834,13 @@ esp_err_t tlc_read_all_pwm_values(uint8_t hardware_state[10][16])
         return ESP_ERR_INVALID_ARG;
     }
 
+    // Lock I2C bus for exclusive validation readback
+    // This prevents interference from light sensor, brightness updates, display writes, etc.
+    if (thread_safe_i2c_lock(MUTEX_TIMEOUT_TICKS) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to acquire I2C mutex for PWM readback");
+        return ESP_ERR_TIMEOUT;
+    }
+
     esp_err_t ret = ESP_OK;
     int success_count = 0;
 
@@ -819,6 +861,8 @@ esp_err_t tlc_read_all_pwm_values(uint8_t hardware_state[10][16])
         vTaskDelay(pdMS_TO_TICKS(2));
     }
 
+    thread_safe_i2c_unlock();
+
     ESP_LOGI(TAG, "Hardware readback: %d/10 devices read successfully",
              success_count);
 
@@ -830,6 +874,12 @@ esp_err_t tlc_read_global_brightness(uint8_t grppwm_values[10])
     if (grppwm_values == NULL) {
         ESP_LOGE(TAG, "GRPPWM values array is NULL");
         return ESP_ERR_INVALID_ARG;
+    }
+
+    // Lock I2C bus for exclusive access during readback
+    if (thread_safe_i2c_lock(MUTEX_TIMEOUT_TICKS) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to acquire I2C mutex for GRPPWM readback");
+        return ESP_ERR_TIMEOUT;
     }
 
     esp_err_t ret = ESP_OK;
@@ -860,6 +910,8 @@ esp_err_t tlc_read_global_brightness(uint8_t grppwm_values[10])
         }
     }
 
+    thread_safe_i2c_unlock();
+
     ESP_LOGI(TAG, "Global brightness readback: %d/10 devices read successfully",
              success_count);
 
@@ -871,6 +923,12 @@ esp_err_t tlc_read_error_flags(uint8_t eflag_values[10][2])
     if (eflag_values == NULL) {
         ESP_LOGE(TAG, "EFLAG values array is NULL");
         return ESP_ERR_INVALID_ARG;
+    }
+
+    // Lock I2C bus for exclusive access during readback
+    if (thread_safe_i2c_lock(MUTEX_TIMEOUT_TICKS) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to acquire I2C mutex for EFLAG readback");
+        return ESP_ERR_TIMEOUT;
     }
 
     esp_err_t ret = ESP_OK;
@@ -909,6 +967,8 @@ esp_err_t tlc_read_error_flags(uint8_t eflag_values[10][2])
             }
         }
     }
+
+    thread_safe_i2c_unlock();
 
     ESP_LOGI(TAG, "Error flag readback: %d/10 devices read, errors found: %s",
              success_count, errors_found ? "YES" : "NO");

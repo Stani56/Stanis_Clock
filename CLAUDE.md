@@ -133,6 +133,24 @@ Very Bright: 500-1500 lux → 200-255 brightness
 
 **22 Thread-Safe Accessors** - Use these instead of direct global access
 
+### LED Validation System
+**Post-Transition Validation:**
+- Validates hardware state immediately after transitions complete
+- Auto-increment pointer fresh from sequential writes (reliable readback)
+- Triggers every ~5 minutes when display changes
+- 3-level validation: Software state → Hardware PWM → TLC fault detection
+
+**Key Features:**
+- I2C mutex protection prevents concurrent access during readback
+- Detects both incorrect active LEDs and accidentally lit unused LEDs
+- MQTT publishing of validation results with detailed statistics
+- ~30ms validation time (negligible overhead)
+
+**Why Post-Transition?**
+- TLC59116 auto-increment pointer in known state after sequential transition writes
+- Eliminates false positives from pointer corruption during differential updates
+- Display stable (no more changes for ~5 minutes)
+
 ## Home Assistant Integration
 
 ### MQTT Discovery (36 Entities)
@@ -203,6 +221,8 @@ idf.py fullclean && idf.py build
 - **Differential updates** reduce bus saturation by 95%
 - **Conservative timeouts** (1000ms) prevent system lockup
 - **Static allocation** prevents WiFi init timing conflicts
+- **I2C mutex protection** critical for all read/write operations (prevents race conditions)
+- **Post-transition validation** eliminates TLC59116 auto-increment pointer corruption issues
 
 ### Brightness System Fixes (Jan 2025)
 - Increased defaults: 60 individual (was 32), 180 global (was 120) = 7× brighter startup

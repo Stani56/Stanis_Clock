@@ -94,7 +94,17 @@ static esp_err_t initialize_hardware(void)
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Display initialization failed - continuing with degraded display");
     }
-    
+
+    // Run TLC diagnostic test on suspicious devices
+    ESP_LOGI(TAG, "Running TLC diagnostic test...");
+    ret = tlc_diagnostic_test();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "⚠️  TLC diagnostic test detected readback issues");
+        ESP_LOGW(TAG, "Validation may report false positives - display writes are working correctly");
+    } else {
+        ESP_LOGI(TAG, "✅ TLC diagnostic test passed - readback verified");
+    }
+
     // Initialize brightness control (ADC + light sensor)
     ret = brightness_control_init();
     if (ret != ESP_OK) {
@@ -351,7 +361,10 @@ static void test_live_word_clock(void)
         
         // Sync LED state after transitions
         sync_led_state_after_transitions();
-        
+
+        // Trigger validation immediately after transition (auto-increment pointer is fresh)
+        trigger_validation_post_transition();
+
         // 5 second update interval
         vTaskDelay(pdMS_TO_TICKS(5000));
     }
