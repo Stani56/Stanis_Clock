@@ -3,6 +3,7 @@
 #include "wordclock_display.h"  // For build_led_state_matrix() and led_state[]
 #include "wordclock_time.h"     // For wordclock_time_t
 #include "thread_safety.h"      // For LED state mutex functions
+#include "transition_manager.h" // For transition_manager_is_active()
 #include "nvs_flash.h"          // For NVS configuration storage
 #include "nvs.h"
 #include "esp_log.h"
@@ -787,6 +788,13 @@ static void validation_task(void *pvParameters)
         if (!enabled) {
             ESP_LOGD(TAG, "Validation disabled, skipping");
             vTaskDelay(pdMS_TO_TICKS(60000)); // Check every minute
+            continue;
+        }
+
+        // Check if transitions are currently active
+        if (transition_manager_is_active()) {
+            ESP_LOGD(TAG, "Transitions active, postponing validation by 5 seconds");
+            vTaskDelay(pdMS_TO_TICKS(5000));
             continue;
         }
 
