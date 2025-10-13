@@ -915,7 +915,7 @@ esp_err_t start_validation_task(void)
     BaseType_t ret = xTaskCreate(
         validation_task,
         "led_validation",
-        4096,
+        6144,  // Increased from 4096 to accommodate MQTT JSON buffers
         NULL,
         5,
         &validation_task_handle
