@@ -120,6 +120,12 @@ esp_err_t tlc_set_individual_brightness(uint8_t brightness);
 uint8_t tlc_get_individual_brightness(void);
 uint8_t tlc_get_global_brightness(void);
 
+// TLC59116 Register Read Functions (for LED validation)
+esp_err_t tlc_read_pwm_values(uint8_t tlc_index, uint8_t pwm_values[16]);
+esp_err_t tlc_read_all_pwm_values(uint8_t hardware_state[10][16]);
+esp_err_t tlc_read_global_brightness(uint8_t grppwm_values[10]);
+esp_err_t tlc_read_error_flags(uint8_t eflag_values[10][2]);
+
 // DS3231 Functions
 esp_err_t ds3231_init(void);
 esp_err_t ds3231_get_time_struct(wordclock_time_t *time);

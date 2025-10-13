@@ -747,7 +747,172 @@ esp_err_t bh1750_read_data(uint8_t *data, size_t len)
         ESP_LOGE(TAG, "BH1750 device handle not available");
         return ESP_ERR_INVALID_STATE;
     }
-    
+
     return i2c_master_receive(bh1750_dev_handle, data, len, pdMS_TO_TICKS(1000));
+}
+
+// ============================================================================
+// TLC59116 Register Read Functions (for LED validation)
+// ============================================================================
+
+esp_err_t tlc_read_pwm_values(uint8_t tlc_index, uint8_t pwm_values[16])
+{
+    if (tlc_index >= TLC59116_COUNT) {
+        ESP_LOGE(TAG, "Invalid TLC index: %d", tlc_index);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (pwm_values == NULL) {
+        ESP_LOGE(TAG, "PWM values array is NULL");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!tlc_devices[tlc_index].initialized) {
+        ESP_LOGW(TAG, "TLC59116 device %d not initialized", tlc_index);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    uint8_t device_addr = tlc_addresses[tlc_index];
+
+    // Read all 16 PWM registers (0x02-0x11) in one transaction
+    // Auto-increment mode should be enabled during init
+    esp_err_t ret = i2c_read_bytes(
+        I2C_LEDS_MASTER_PORT,
+        device_addr,
+        TLC59116_PWM0,
+        pwm_values,
+        16  // Read all 16 PWM registers
+    );
+
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to read PWM values from TLC %d: %s",
+                 tlc_index, esp_err_to_name(ret));
+    }
+
+    return ret;
+}
+
+esp_err_t tlc_read_all_pwm_values(uint8_t hardware_state[10][16])
+{
+    if (hardware_state == NULL) {
+        ESP_LOGE(TAG, "Hardware state array is NULL");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t ret = ESP_OK;
+    int success_count = 0;
+
+    for (uint8_t row = 0; row < TLC59116_COUNT; row++) {
+        esp_err_t row_ret = tlc_read_pwm_values(row, hardware_state[row]);
+
+        if (row_ret == ESP_OK) {
+            success_count++;
+        } else {
+            // Mark row as invalid on read failure
+            memset(hardware_state[row], 0xFF, 16);
+            ret = row_ret;
+            ESP_LOGW(TAG, "Failed to read PWM from TLC %d: %s",
+                     row, esp_err_to_name(row_ret));
+        }
+
+        // Small delay between devices to prevent I2C bus saturation
+        vTaskDelay(pdMS_TO_TICKS(2));
+    }
+
+    ESP_LOGI(TAG, "Hardware readback: %d/10 devices read successfully",
+             success_count);
+
+    return (success_count > 0) ? ESP_OK : ret;
+}
+
+esp_err_t tlc_read_global_brightness(uint8_t grppwm_values[10])
+{
+    if (grppwm_values == NULL) {
+        ESP_LOGE(TAG, "GRPPWM values array is NULL");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t ret = ESP_OK;
+    int success_count = 0;
+
+    for (uint8_t i = 0; i < TLC59116_COUNT; i++) {
+        if (!tlc_devices[i].initialized) {
+            grppwm_values[i] = 0xFF;  // Invalid marker
+            continue;
+        }
+
+        uint8_t device_addr = tlc_addresses[i];
+        esp_err_t device_ret = i2c_read_bytes(
+            I2C_LEDS_MASTER_PORT,
+            device_addr,
+            TLC59116_GRPPWM,
+            &grppwm_values[i],
+            1
+        );
+
+        if (device_ret == ESP_OK) {
+            success_count++;
+        } else {
+            grppwm_values[i] = 0xFF;
+            ret = device_ret;
+            ESP_LOGW(TAG, "Failed to read GRPPWM from TLC %d: %s",
+                     i, esp_err_to_name(device_ret));
+        }
+    }
+
+    ESP_LOGI(TAG, "Global brightness readback: %d/10 devices read successfully",
+             success_count);
+
+    return (success_count > 0) ? ESP_OK : ret;
+}
+
+esp_err_t tlc_read_error_flags(uint8_t eflag_values[10][2])
+{
+    if (eflag_values == NULL) {
+        ESP_LOGE(TAG, "EFLAG values array is NULL");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t ret = ESP_OK;
+    bool errors_found = false;
+    int success_count = 0;
+
+    for (uint8_t i = 0; i < TLC59116_COUNT; i++) {
+        if (!tlc_devices[i].initialized) {
+            eflag_values[i][0] = 0xFF;
+            eflag_values[i][1] = 0xFF;
+            continue;
+        }
+
+        uint8_t device_addr = tlc_addresses[i];
+
+        // Read EFLAG1 and EFLAG2 (0x1D and 0x1E)
+        esp_err_t device_ret = i2c_read_bytes(
+            I2C_LEDS_MASTER_PORT,
+            device_addr,
+            TLC59116_EFLAG1,
+            eflag_values[i],
+            2  // Read both EFLAG registers
+        );
+
+        if (device_ret != ESP_OK) {
+            ret = device_ret;
+            ESP_LOGW(TAG, "Failed to read EFLAG from TLC %d: %s",
+                     i, esp_err_to_name(device_ret));
+        } else {
+            success_count++;
+            // Non-zero EFLAG indicates hardware fault
+            if (eflag_values[i][0] != 0 || eflag_values[i][1] != 0) {
+                errors_found = true;
+                ESP_LOGW(TAG, "TLC %d EFLAG errors: 0x%02X 0x%02X",
+                         i, eflag_values[i][0], eflag_values[i][1]);
+            }
+        }
+    }
+
+    ESP_LOGI(TAG, "Error flag readback: %d/10 devices read, errors found: %s",
+             success_count, errors_found ? "YES" : "NO");
+
+    return errors_found ? ESP_FAIL : ret;
 }
 
