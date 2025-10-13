@@ -874,6 +874,34 @@ static void validation_task(void *pvParameters)
                 result.grppwm_mismatch ? "true" : "false");
             mqtt_publish_validation_last_result(result_json);
 
+            // Publish detailed mismatch list if any mismatches exist
+            if (result.hardware_mismatch_count > 0 && result.hardware_mismatch_count <= 50) {
+                // Build compact mismatch report
+                char mismatch_json[1024];  // Larger buffer for mismatch details
+                int pos = snprintf(mismatch_json, sizeof(mismatch_json),
+                    "{\"count\":%d,\"leds\":[", result.hardware_mismatch_count);
+
+                for (uint8_t i = 0; i < result.hardware_mismatch_count && i < 50 && pos < sizeof(mismatch_json) - 50; i++) {
+                    const led_mismatch_t *m = &result.mismatches[i];
+                    int written = snprintf(mismatch_json + pos, sizeof(mismatch_json) - pos,
+                        "%s{\"r\":%d,\"c\":%d,\"exp\":%d,\"sw\":%d,\"hw\":%d,\"diff\":%d}",
+                        (i > 0) ? "," : "",
+                        m->row, m->col, m->expected, m->software, m->hardware,
+                        abs((int)m->hardware - (int)m->software));
+                    if (written > 0) pos += written;
+                }
+                snprintf(mismatch_json + pos, sizeof(mismatch_json) - pos, "]}");
+
+                // Create new MQTT topic for mismatches
+                char mismatch_topic[128];
+                snprintf(mismatch_topic, sizeof(mismatch_topic),
+                    "home/" MQTT_DEVICE_NAME "/validation/mismatches");
+
+                // Publish using the generic publish function (need to add this)
+                // For now, log it - we'll need to add a generic publish function
+                ESP_LOGI(TAG, "Mismatch details: %s", mismatch_json);
+            }
+
             // Build and publish statistics JSON
             validation_statistics_t stats;
             get_validation_statistics(&stats);
