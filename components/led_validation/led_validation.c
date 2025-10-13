@@ -799,6 +799,11 @@ static void validation_task(void *pvParameters)
             continue;
         }
 
+        // Add stabilization delay to ensure all LED writes are complete
+        // Transitions may have just finished, hardware needs time to settle
+        ESP_LOGD(TAG, "Waiting 500ms for display to stabilize");
+        vTaskDelay(pdMS_TO_TICKS(500));
+
         // Get current time for validation
         wordclock_time_t current_time;
         if (ds3231_get_time_struct(&current_time) != ESP_OK) {
