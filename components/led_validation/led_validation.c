@@ -577,40 +577,189 @@ uint8_t calculate_validation_health_score(const validation_statistics_t *stats)
 }
 
 // ============================================================================
-// Recovery Functions (Stubs for now - will implement in Phase 4a)
+// Recovery Functions
 // ============================================================================
+
+bool recover_hardware_mismatch(const validation_result_enhanced_t *result)
+{
+    if (result == NULL || result->hardware_mismatch_count == 0) {
+        return true;
+    }
+
+    ESP_LOGW(TAG, "Attempting to recover from hardware mismatch (%d LEDs)",
+             result->hardware_mismatch_count);
+
+    uint16_t recovered = 0;
+    uint16_t failed = 0;
+
+    // Rewrite mismatched LEDs
+    for (uint16_t i = 0; i < result->hardware_mismatch_count && i < 50; i++) {
+        const led_mismatch_t *mismatch = &result->mismatches[i];
+
+        ESP_LOGD(TAG, "Rewriting LED[%d][%d]: expected=%d",
+                 mismatch->row, mismatch->col, mismatch->expected);
+
+        esp_err_t ret = tlc_set_matrix_led(mismatch->row, mismatch->col, mismatch->expected);
+        if (ret == ESP_OK) {
+            recovered++;
+        } else {
+            failed++;
+        }
+        vTaskDelay(pdMS_TO_TICKS(2));
+    }
+
+    ESP_LOGI(TAG, "Hardware mismatch recovery: %d recovered, %d failed", recovered, failed);
+    vTaskDelay(pdMS_TO_TICKS(50));
+
+    return (failed == 0);
+}
+
+bool recover_hardware_fault(const validation_result_enhanced_t *result)
+{
+    if (result == NULL || !result->hardware_faults_detected) {
+        return true;
+    }
+
+    ESP_LOGE(TAG, "Attempting to recover from hardware faults (%d devices)",
+             result->devices_with_faults);
+
+    uint8_t recovered = 0;
+
+    for (uint8_t i = 0; i < 10; i++) {
+        if (result->eflag_values[i][0] != 0 || result->eflag_values[i][1] != 0) {
+            ESP_LOGE(TAG, "Device %d EFLAG: 0x%02X 0x%02X - resetting",
+                     i, result->eflag_values[i][0], result->eflag_values[i][1]);
+
+            if (tlc59116_reset_device(i) == ESP_OK) {
+                vTaskDelay(pdMS_TO_TICKS(10));
+                if (tlc59116_init_device(i) == ESP_OK) {
+                    recovered++;
+                }
+            }
+        }
+    }
+
+    ESP_LOGI(TAG, "Hardware fault recovery: %d/%d devices recovered",
+             recovered, result->devices_with_faults);
+    return (recovered > 0);
+}
+
+bool recover_i2c_bus_failure(void)
+{
+    ESP_LOGE(TAG, "Attempting I2C bus recovery - reinitializing all devices");
+
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    if (tlc59116_init_all() != ESP_OK) {
+        return false;
+    }
+
+    // Verify recovery
+    uint8_t test_pwm[16];
+    uint8_t success_count = 0;
+    for (uint8_t i = 0; i < 10; i++) {
+        if (tlc_read_pwm_values(i, test_pwm) == ESP_OK) {
+            success_count++;
+        }
+    }
+
+    ESP_LOGI(TAG, "I2C recovery: %d/10 devices responsive", success_count);
+    return (success_count >= 8);
+}
+
+bool recover_grppwm_mismatch(const validation_result_enhanced_t *result)
+{
+    if (result == NULL || !result->grppwm_mismatch) {
+        return true;
+    }
+
+    ESP_LOGW(TAG, "Recovering GRPPWM mismatch (expected: %d)", result->expected_grppwm);
+
+    if (tlc_set_global_brightness(result->expected_grppwm) != ESP_OK) {
+        return false;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    // Verify
+    uint8_t verify_grppwm[10];
+    if (tlc_read_global_brightness(verify_grppwm) != ESP_OK) {
+        return false;
+    }
+
+    uint8_t correct = 0;
+    for (uint8_t i = 0; i < 10; i++) {
+        if (verify_grppwm[i] == result->expected_grppwm) {
+            correct++;
+        }
+    }
+
+    ESP_LOGI(TAG, "GRPPWM recovery: %d/10 correct", correct);
+    return (correct == 10);
+}
 
 bool attempt_recovery(
     const validation_result_enhanced_t *result,
     failure_type_t failure
 )
 {
-    // TODO: Implement in Phase 4b
-    return false;
-}
+    if (result == NULL) {
+        return false;
+    }
 
-bool recover_hardware_mismatch(const validation_result_enhanced_t *result)
-{
-    // TODO: Implement in Phase 4a
-    return false;
-}
+    ESP_LOGW(TAG, "=== RECOVERY: %s ===", get_failure_type_name(failure));
 
-bool recover_hardware_fault(const validation_result_enhanced_t *result)
-{
-    // TODO: Implement in Phase 4a
-    return false;
-}
+    bool success = false;
+    uint8_t max_attempts = 3;
 
-bool recover_i2c_bus_failure(void)
-{
-    // TODO: Implement in Phase 4a
-    return false;
-}
+    if (xSemaphoreTake(g_stats_mutex, MUTEX_TIMEOUT_TICKS) == pdTRUE) {
+        g_statistics.recovery_attempts++;
+        xSemaphoreGive(g_stats_mutex);
+    }
 
-bool recover_grppwm_mismatch(const validation_result_enhanced_t *result)
-{
-    // TODO: Implement in Phase 4a
-    return false;
+    for (uint8_t attempt = 1; attempt <= max_attempts; attempt++) {
+        ESP_LOGI(TAG, "Attempt %d/%d", attempt, max_attempts);
+
+        switch (failure) {
+            case FAILURE_HARDWARE_FAULT:
+                success = recover_hardware_fault(result);
+                break;
+            case FAILURE_I2C_BUS_FAILURE:
+                success = recover_i2c_bus_failure();
+                break;
+            case FAILURE_SYSTEMATIC_MISMATCH:
+            case FAILURE_PARTIAL_MISMATCH:
+                success = recover_hardware_mismatch(result);
+                break;
+            case FAILURE_GRPPWM_MISMATCH:
+                success = recover_grppwm_mismatch(result);
+                break;
+            default:
+                success = true;
+                break;
+        }
+
+        if (success) {
+            ESP_LOGI(TAG, "=== RECOVERY SUCCESS ===");
+            break;
+        }
+
+        if (attempt < max_attempts) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+    }
+
+    if (xSemaphoreTake(g_stats_mutex, MUTEX_TIMEOUT_TICKS) == pdTRUE) {
+        if (success) {
+            g_statistics.recovery_successes++;
+        } else {
+            g_statistics.recovery_failures++;
+            ESP_LOGE(TAG, "=== RECOVERY FAILED ===");
+        }
+        xSemaphoreGive(g_stats_mutex);
+    }
+
+    return success;
 }
 
 // ============================================================================
