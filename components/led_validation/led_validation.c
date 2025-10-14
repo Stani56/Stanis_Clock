@@ -488,7 +488,7 @@ void get_default_validation_config(validation_config_t *config)
     config->restart_on_partial_mismatch = false;
     config->restart_on_grppwm_mismatch = false;
     config->max_restarts_per_session = 3;
-    config->validation_interval_sec = 300;  // 5 minutes
+    config->validation_interval_sec = 350;  // 5 minutes 50 seconds (out of phase with 5-min display changes)
     config->validation_enabled = true;
 }
 
@@ -897,6 +897,7 @@ bool attempt_recovery(
 
 static TaskHandle_t validation_task_handle = NULL;
 static bool task_running = false;
+static volatile TickType_t last_validation_tick = 0;  // Track last validation time
 
 static void validation_task(void *pvParameters)
 {
@@ -905,7 +906,7 @@ static void validation_task(void *pvParameters)
     while (task_running) {
         // Check if validation is enabled
         bool enabled = false;
-        uint16_t interval_sec = 300;
+        uint16_t interval_sec = 350;
 
         if (xSemaphoreTake(g_config_mutex, MUTEX_TIMEOUT_TICKS) == pdTRUE) {
             enabled = g_config.validation_enabled;
@@ -917,6 +918,22 @@ static void validation_task(void *pvParameters)
             ESP_LOGD(TAG, "Validation disabled, skipping");
             vTaskDelay(pdMS_TO_TICKS(60000)); // Check every minute
             continue;
+        }
+
+        // Check if enough time has elapsed since last validation
+        TickType_t current_tick = xTaskGetTickCount();
+        TickType_t interval_ticks = pdMS_TO_TICKS(interval_sec * 1000);
+
+        if (last_validation_tick > 0) {
+            TickType_t elapsed_ticks = current_tick - last_validation_tick;
+            if (elapsed_ticks < interval_ticks) {
+                // Not enough time elapsed, wait a bit more
+                TickType_t remaining_ticks = interval_ticks - elapsed_ticks;
+                uint32_t remaining_sec = remaining_ticks * portTICK_PERIOD_MS / 1000;
+                ESP_LOGD(TAG, "Post-transition validation ran recently, waiting %lu more seconds", remaining_sec);
+                vTaskDelay(pdMS_TO_TICKS(10000)); // Check again in 10 seconds
+                continue;
+            }
         }
 
         // Check if transitions are currently active
@@ -1061,6 +1078,9 @@ static void validation_task(void *pvParameters)
                 stats.grppwm_mismatch_count, stats.software_error_count);
             mqtt_publish_validation_statistics(stats_json);
         }
+
+        // Update last validation timestamp
+        last_validation_tick = xTaskGetTickCount();
 
         // Wait for next validation interval
         ESP_LOGD(TAG, "Next validation in %d seconds", interval_sec);
@@ -1266,5 +1286,9 @@ esp_err_t trigger_validation_post_transition(void)
     }
 
     ESP_LOGI(TAG, "=== POST-TRANSITION VALIDATION COMPLETE ===");
+
+    // Update last validation timestamp so scheduled validation knows when we ran
+    last_validation_tick = xTaskGetTickCount();
+
     return ESP_OK;
 }
