@@ -1067,10 +1067,10 @@ static void validation_task(void *pvParameters)
 
             char stats_json[512];
             snprintf(stats_json, sizeof(stats_json),
-                "{\"total_validations\":%" PRIu32 ",\"failed\":%" PRIu32 ",\"health_score\":%d,"
+                "{\"total_validations\":%" PRIu32 ",\"validations_failed\":%" PRIu32 ",\"health_score\":%d,"
                 "\"consecutive_failures\":%d,\"recovery_attempts\":%" PRIu32 ",\"recovery_successes\":%" PRIu32 ","
-                "\"hardware_faults\":%" PRIu32 ",\"i2c_failures\":%" PRIu32 ",\"systematic_mismatches\":%" PRIu32 ","
-                "\"partial_mismatches\":%" PRIu32 ",\"grppwm_mismatches\":%" PRIu32 ",\"software_errors\":%" PRIu32 "}",
+                "\"hardware_fault_count\":%" PRIu32 ",\"i2c_bus_failure_count\":%" PRIu32 ",\"systematic_mismatch_count\":%" PRIu32 ","
+                "\"partial_mismatch_count\":%" PRIu32 ",\"grppwm_mismatch_count\":%" PRIu32 ",\"software_error_count\":%" PRIu32 "}",
                 stats.total_validations, stats.validations_failed, health,
                 stats.consecutive_failures, stats.recovery_attempts, stats.recovery_successes,
                 stats.hardware_fault_count, stats.i2c_bus_failure_count,
@@ -1273,10 +1273,10 @@ esp_err_t trigger_validation_post_transition(void)
 
         char stats_json[512];
         snprintf(stats_json, sizeof(stats_json),
-            "{\"total_validations\":%" PRIu32 ",\"failed\":%" PRIu32 ",\"health_score\":%d,"
+            "{\"total_validations\":%" PRIu32 ",\"validations_failed\":%" PRIu32 ",\"health_score\":%d,"
             "\"consecutive_failures\":%d,\"recovery_attempts\":%" PRIu32 ",\"recovery_successes\":%" PRIu32 ","
-            "\"hardware_faults\":%" PRIu32 ",\"i2c_failures\":%" PRIu32 ",\"systematic_mismatches\":%" PRIu32 ","
-            "\"partial_mismatches\":%" PRIu32 ",\"grppwm_mismatches\":%" PRIu32 ",\"software_errors\":%" PRIu32 "}",
+            "\"hardware_fault_count\":%" PRIu32 ",\"i2c_bus_failure_count\":%" PRIu32 ",\"systematic_mismatch_count\":%" PRIu32 ","
+            "\"partial_mismatch_count\":%" PRIu32 ",\"grppwm_mismatch_count\":%" PRIu32 ",\"software_error_count\":%" PRIu32 "}",
             stats.total_validations, stats.validations_failed, health,
             stats.consecutive_failures, stats.recovery_attempts, stats.recovery_successes,
             stats.hardware_fault_count, stats.i2c_bus_failure_count,
