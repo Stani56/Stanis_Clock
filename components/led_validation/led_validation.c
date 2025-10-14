@@ -1010,10 +1010,10 @@ static void validation_task(void *pvParameters)
 
         // Publish validation results to MQTT
         {
-            // Get current timestamp
+            // Get current timestamp in UTC for Home Assistant
             time_t now = time(NULL);
             struct tm timeinfo;
-            localtime_r(&now, &timeinfo);
+            gmtime_r(&now, &timeinfo);  // Use UTC time to match "Z" suffix
             char timestamp[32];
             strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
 
@@ -1242,7 +1242,7 @@ esp_err_t trigger_validation_post_transition(void)
     {
         time_t now = time(NULL);
         struct tm timeinfo;
-        localtime_r(&now, &timeinfo);
+        gmtime_r(&now, &timeinfo);  // Use UTC time to match "Z" suffix
         char timestamp[32];
         strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
 
