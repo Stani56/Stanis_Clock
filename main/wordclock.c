@@ -300,70 +300,97 @@ static void test_live_word_clock(void)
     ESP_LOGI(TAG, "Reading time from DS3231 and displaying German words");
     
     wordclock_time_t current_time;
+    wordclock_time_t previous_time = {0};
     uint32_t loop_count = 0;
-    
+    bool first_loop = true;
+
     // Start light sensor monitoring
     esp_err_t ret = start_light_sensor_monitoring();
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "✅ Light sensor monitoring started");
     }
-    
+
     while (1) {
         loop_count++;
-        
+
         // Read current time from RTC
         ret = wordclock_time_get(&current_time);
         if (ret == ESP_OK) {
+            // Check if display will actually change (5-minute words or hour change)
+            bool should_validate = first_loop;  // Always validate on first display
+
+            if (!first_loop) {
+                // Calculate base minutes (5-minute floor)
+                uint8_t old_base = (previous_time.minutes / 5) * 5;
+                uint8_t new_base = (current_time.minutes / 5) * 5;
+
+                // Calculate display hours (accounting for 25+ minute rule)
+                uint8_t old_display_hour = (old_base >= 25) ? (previous_time.hours + 1) % 12 : previous_time.hours % 12;
+                uint8_t new_display_hour = (new_base >= 25) ? (current_time.hours + 1) % 12 : current_time.hours % 12;
+
+                // Check if words actually change
+                should_validate = (old_base != new_base) ||
+                                (old_display_hour != new_display_hour) ||
+                                ((old_base == 0) != (new_base == 0)); // UHR appears/disappears
+            }
+
             // Display time with transitions
             display_german_time_with_transitions(&current_time);
-            
+
+            // Only validate if display actually changed
+            if (should_validate) {
+                // Sync LED state after transitions
+                sync_led_state_after_transitions();
+
+                // Trigger validation immediately after transition (auto-increment pointer is fresh)
+                trigger_validation_post_transition();
+            }
+
+            // Update previous time
+            previous_time = current_time;
+            first_loop = false;
+
             // Log time occasionally
             if (loop_count % 20 == 0) {
-                ESP_LOGI(TAG, "Current time: %02d:%02d:%02d", 
+                ESP_LOGI(TAG, "Current time: %02d:%02d:%02d",
                          current_time.hours, current_time.minutes, current_time.seconds);
             }
         } else {
             ESP_LOGW(TAG, "Failed to read RTC - displaying test time");
             display_test_time();
         }
-        
-        // Update brightness from potentiometer every 3rd loop (15 seconds) - increased responsiveness  
+
+        // Update brightness from potentiometer every 3rd loop (15 seconds) - increased responsiveness
         if (loop_count % 3 == 0) {
             update_brightness_from_potentiometer();
         }
-        
+
         // Network status logging
         if (loop_count % 20 == 0) {
             if (thread_safe_get_wifi_connected()) {
                 ESP_LOGI(TAG, "WiFi Status: Connected");
             }
-            
+
             if (thread_safe_get_ntp_synced()) {
                 ESP_LOGI(TAG, "NTP Status: Synchronized");
-                
+
                 // Sync RTC with NTP time if available
                 ret = ntp_manager_sync_rtc();
                 if (ret == ESP_OK) {
                     ESP_LOGI(TAG, "RTC synchronized with NTP time");
                 }
             }
-            
+
             if (thread_safe_get_mqtt_connected()) {
                 ESP_LOGI(TAG, "MQTT Status: Connected");
-                
+
                 // Publish sensor status
                 mqtt_publish_sensor_status();
-                
+
                 // Publish heartbeat with NTP info
                 mqtt_publish_heartbeat_with_ntp();
             }
         }
-        
-        // Sync LED state after transitions
-        sync_led_state_after_transitions();
-
-        // Trigger validation immediately after transition (auto-increment pointer is fresh)
-        trigger_validation_post_transition();
 
         // 5 second update interval
         vTaskDelay(pdMS_TO_TICKS(5000));

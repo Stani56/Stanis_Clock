@@ -72,23 +72,64 @@ esp_err_t transitions_init(void)
 
 /**
  * @brief Sync LED state array after transitions complete
+ *
+ * After transitions finish updating hardware, this function synchronizes
+ * the software led_state[][] array to match the actual display.
  */
 void sync_led_state_after_transitions(void)
 {
     if (!transition_manager_is_active()) {
         return;  // No sync needed if no transitions
     }
-    
+
     // Wait for transitions to complete
     while (transition_manager_is_active()) {
         vTaskDelay(pdMS_TO_TICKS(50));
     }
-    
-    // Sync LED state array with actual hardware state
+
     ESP_LOGD(TAG, "🔄 Syncing LED state after transitions");
-    
-    // The LED state should already be correct from display_german_time
-    // This function is mainly for ensuring consistency
+
+    // Get current individual brightness to apply to lit LEDs
+    uint8_t current_brightness = tlc_get_individual_brightness();
+
+    // Lock LED state for update
+    if (thread_safe_led_state_lock(pdMS_TO_TICKS(1000)) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to lock LED state mutex for sync");
+        return;
+    }
+
+    // Rebuild LED state array from the current time
+    // This ensures led_state[][] matches what's actually displayed
+    uint8_t expected_state[WORDCLOCK_ROWS][WORDCLOCK_COLS] = {0};
+    build_led_state_matrix(&previous_display_time, expected_state);
+
+    // Update led_state[][] to match expected state
+    // Also explicitly clear unused LEDs in hardware to fix phantom lit LEDs
+    uint8_t leds_synced = 0;
+    uint8_t leds_cleared = 0;
+
+    for (uint8_t row = 0; row < WORDCLOCK_ROWS; row++) {
+        for (uint8_t col = 0; col < WORDCLOCK_COLS; col++) {
+            if (expected_state[row][col] > 0) {
+                // LED should be lit
+                led_state[row][col] = current_brightness;
+                leds_synced++;
+            } else {
+                // LED should be OFF - explicitly clear it in hardware
+                if (led_state[row][col] != 0) {
+                    // Only write if it's not already 0 in software
+                    tlc_set_matrix_led(row, col, 0);
+                    leds_cleared++;
+                }
+                led_state[row][col] = 0;
+            }
+        }
+    }
+
+    thread_safe_led_state_unlock();
+
+    ESP_LOGD(TAG, "✅ LED state synchronized: %d lit @ %d, %d cleared",
+             leds_synced, current_brightness, leds_cleared);
 }
 
 /**

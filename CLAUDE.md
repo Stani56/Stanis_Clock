@@ -136,7 +136,7 @@ Very Bright: 500-1500 lux → 200-255 brightness
 ### LED Validation System
 **Post-Transition Validation:**
 - Validates hardware state immediately after transitions complete
-- Auto-increment pointer fresh from sequential writes (reliable readback)
+- Byte-by-byte PWM reads with explicit no-auto-increment addressing
 - Triggers every ~5 minutes when display changes
 - 3-level validation: Software state → Hardware PWM → TLC fault detection
 
@@ -144,12 +144,13 @@ Very Bright: 500-1500 lux → 200-255 brightness
 - I2C mutex protection prevents concurrent access during readback
 - Detects both incorrect active LEDs and accidentally lit unused LEDs
 - MQTT publishing of validation results with detailed statistics
-- ~30ms validation time (negligible overhead)
+- ~130ms validation time (16 reads × 10 devices)
 
-**Why Post-Transition?**
-- TLC59116 auto-increment pointer in known state after sequential transition writes
-- Eliminates false positives from pointer corruption during differential updates
-- Display stable (no more changes for ~5 minutes)
+**Critical Fix (Oct 2025):**
+- TLC59116 auto-increment pointer corruption resolved
+- Register address masking with 0x1F disables auto-increment (bits 7:6 = 00)
+- Each PWM register read independently with explicit address
+- See [docs/implementation/tlc59116-validation-fix.md](docs/implementation/tlc59116-validation-fix.md) for detailed analysis
 
 ## Home Assistant Integration
 
@@ -222,7 +223,13 @@ idf.py fullclean && idf.py build
 - **Conservative timeouts** (1000ms) prevent system lockup
 - **Static allocation** prevents WiFi init timing conflicts
 - **I2C mutex protection** critical for all read/write operations (prevents race conditions)
-- **Post-transition validation** eliminates TLC59116 auto-increment pointer corruption issues
+
+### TLC59116 Auto-Increment Pointer Issue (Oct 2025)
+- **Problem:** Auto-increment pointer corruption after differential writes caused readback of LEDOUT registers (0xAA = 170) instead of PWM values
+- **Solution:** Explicit no-auto-increment addressing by masking register address with 0x1F (bits 7:6 = 00)
+- **Result:** 100% accurate PWM readback for LED validation
+- **Key Insight:** "Why write when we only want to read?" - Pure read operations should have no side effects
+- **Documentation:** [tlc59116-validation-fix.md](docs/implementation/tlc59116-validation-fix.md)
 
 ### Brightness System Fixes (Jan 2025)
 - Increased defaults: 60 individual (was 32), 180 global (was 120) = 7× brighter startup

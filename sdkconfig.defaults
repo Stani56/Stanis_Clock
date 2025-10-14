@@ -41,7 +41,7 @@ CONFIG_LOG_DEFAULT_LEVEL=3
 # Critical: sys_evt task stack size - this task handles WiFi and system events
 CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=8192
 # Main task stack size for complex initialization
-CONFIG_ESP_MAIN_TASK_STACK_SIZE=12288
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 # Timer task stack size for MQTT timers and callbacks
 CONFIG_FREERTOS_TIMER_TASK_STACK_DEPTH=8192
 # MQTT client task stack size

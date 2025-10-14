@@ -810,18 +810,53 @@ esp_err_t tlc_read_pwm_values(uint8_t tlc_index, uint8_t pwm_values[16])
 
     uint8_t device_addr = tlc_addresses[tlc_index];
 
-    // Read all 16 PWM registers in sequence
-    esp_err_t ret = i2c_read_bytes(
-        I2C_LEDS_MASTER_PORT,
-        device_addr,
-        TLC59116_PWM0,
-        pwm_values,
-        16  // Read all 16 PWM registers
-    );
+    // Read each PWM register individually (byte-by-byte) to avoid auto-increment issues
+    // The TLC59116 auto-increment pointer can get corrupted by differential writes,
+    // so we explicitly read each register one at a time with NO AUTO-INCREMENT.
+    //
+    // CRITICAL: TLC59116 register address format (bits 7:5):
+    //   Bit 7:6 = 00: No auto-increment (single register access)
+    //   Bit 7:6 = 10: Auto-increment enabled
+    // We must explicitly set bits 7:6 = 00 by masking with 0x1F!
+    esp_err_t ret = ESP_OK;
+    for (uint8_t ch = 0; ch < 16; ch++) {
+        // Explicit register address with NO auto-increment (bits 7:5 = 000)
+        uint8_t reg_addr = (TLC59116_PWM0 + ch) & 0x1F;  // Mask to disable auto-increment
 
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to read PWM values from TLC %d: %s",
-                 tlc_index, esp_err_to_name(ret));
+        esp_err_t ch_ret = i2c_read_bytes(
+            I2C_LEDS_MASTER_PORT,
+            device_addr,
+            reg_addr,  // No-auto-increment register address
+            &pwm_values[ch],
+            1  // Read single byte
+        );
+
+        if (ch_ret != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to read PWM%d from TLC %d: %s",
+                     ch, tlc_index, esp_err_to_name(ch_ret));
+            ret = ch_ret;
+            // Continue reading other channels even if one fails
+        }
+    }
+
+    // DEBUG: Print readback matrix for TLC device 0 (Row 0) to diagnose pointer issue
+    if (tlc_index == 0) {
+        ESP_LOGI(TAG, "🔍 TLC 0 (Row 0) PWM Readback:");
+        ESP_LOGI(TAG, "  [0-7]:   %3d %3d %3d %3d %3d %3d %3d %3d",
+                 pwm_values[0], pwm_values[1], pwm_values[2], pwm_values[3],
+                 pwm_values[4], pwm_values[5], pwm_values[6], pwm_values[7]);
+        ESP_LOGI(TAG, "  [8-15]:  %3d %3d %3d %3d %3d %3d %3d %3d",
+                 pwm_values[8], pwm_values[9], pwm_values[10], pwm_values[11],
+                 pwm_values[12], pwm_values[13], pwm_values[14], pwm_values[15]);
+
+        // Check if we're reading LEDOUT registers (0xAA = 170) instead of PWM
+        uint8_t aa_count = 0;
+        for (int i = 0; i < 16; i++) {
+            if (pwm_values[i] == 0xAA || pwm_values[i] == 170) aa_count++;
+        }
+        if (aa_count > 5) {
+            ESP_LOGW(TAG, "⚠️  Likely reading LEDOUT registers (0xAA) instead of PWM! Count: %d/16", aa_count);
+        }
     }
 
     return ret;
