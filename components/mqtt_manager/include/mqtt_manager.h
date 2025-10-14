@@ -46,6 +46,10 @@ extern "C" {
 #define MQTT_TOPIC_VALIDATION_LAST_RESULT MQTT_TOPIC_BASE "/validation/last_result"
 #define MQTT_TOPIC_VALIDATION_STATISTICS MQTT_TOPIC_BASE "/validation/statistics"
 #define MQTT_TOPIC_VALIDATION_MISMATCHES MQTT_TOPIC_BASE "/validation/mismatches"
+#define MQTT_TOPIC_ERROR_LOG_QUERY MQTT_TOPIC_BASE "/error_log/query"
+#define MQTT_TOPIC_ERROR_LOG_RESPONSE MQTT_TOPIC_BASE "/error_log/response"
+#define MQTT_TOPIC_ERROR_LOG_STATS MQTT_TOPIC_BASE "/error_log/stats"
+#define MQTT_TOPIC_ERROR_LOG_CLEAR MQTT_TOPIC_BASE "/error_log/clear"
 
 // MQTT Status Messages
 #define MQTT_STATUS_ONLINE "online"
@@ -97,6 +101,10 @@ esp_err_t mqtt_publish_validation_status(const char *result, const char *timesta
 esp_err_t mqtt_publish_validation_last_result(const char *json_payload);
 esp_err_t mqtt_publish_validation_statistics(const char *json_payload);
 esp_err_t mqtt_publish_validation_mismatches(const char *json_payload);
+
+// Error Log Functions
+esp_err_t mqtt_publish_error_log_response(const char *json_payload);
+esp_err_t mqtt_publish_error_log_stats(const char *json_payload);
 
 // Configuration Functions
 esp_err_t mqtt_load_config(mqtt_config_t *config);

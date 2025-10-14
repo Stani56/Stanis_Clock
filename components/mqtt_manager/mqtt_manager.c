@@ -361,6 +361,10 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event
             extern uint16_t transition_duration_ms;
             mqtt_publish_transition_status(transition_duration_ms, transition_system_enabled);
             mqtt_publish_brightness_status(potentiometer_individual, global_brightness);
+
+            // Publish initial error log statistics
+            extern esp_err_t handle_error_log_stats_request(void);
+            handle_error_log_stats_request();
             break;
             
         case MQTT_EVENT_DISCONNECTED:
@@ -404,23 +408,31 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event
                     ESP_LOGI(TAG, "✅ Brightness configuration reset to defaults");
                     // Add small delay to ensure NVS write completes
                     vTaskDelay(pdMS_TO_TICKS(100));
-                    
+
                     // Reset debounce timer to allow immediate writes after reset
                     last_config_write_time = 0;  // Reset to allow immediate writes
                     config_write_pending = false;  // Clear any pending writes
                     ESP_LOGI(TAG, "🔄 Reset debounce timer to allow immediate brightness updates");
-                    
+
                     // Publish updated configuration multiple times with longer delays to force Home Assistant refresh
                     ESP_LOGI(TAG, "🔄 Publishing reset state to force Home Assistant refresh...");
                     for (int i = 0; i < 5; i++) {
                         mqtt_publish_brightness_config_status();
                         vTaskDelay(pdMS_TO_TICKS(500));  // 500ms between publications for better HA processing
                     }
-                    
+
                     ESP_LOGI(TAG, "✅ Updated configuration published to Home Assistant (5x for state refresh)");
                 } else {
                     ESP_LOGE(TAG, "❌ Failed to reset brightness configuration: %s", esp_err_to_name(reset_ret));
                 }
+            } else if (strncmp(event->topic, MQTT_TOPIC_ERROR_LOG_QUERY, strlen(MQTT_TOPIC_ERROR_LOG_QUERY)) == 0) {
+                ESP_LOGI(TAG, "=== ERROR LOG QUERY REQUESTED ===");
+                extern esp_err_t handle_error_log_query(const char *payload, int payload_len);
+                handle_error_log_query(event->data, event->data_len);
+            } else if (strncmp(event->topic, MQTT_TOPIC_ERROR_LOG_CLEAR, strlen(MQTT_TOPIC_ERROR_LOG_CLEAR)) == 0) {
+                ESP_LOGI(TAG, "=== ERROR LOG CLEAR REQUESTED ===");
+                extern esp_err_t handle_error_log_clear(const char *payload, int payload_len);
+                handle_error_log_clear(event->data, event->data_len);
             }
             break;
             
@@ -1708,7 +1720,23 @@ esp_err_t mqtt_subscribe_to_topics(void) {
     } else {
         ESP_LOGI(TAG, "✅ Subscribed to brightness config reset: %s", MQTT_TOPIC_BRIGHTNESS_CONFIG_RESET);
     }
-    
+
+    // Subscribe to error log query
+    ret = esp_mqtt_client_subscribe(mqtt_client, MQTT_TOPIC_ERROR_LOG_QUERY, 1);
+    if (ret == -1) {
+        ESP_LOGW(TAG, "Failed to subscribe to error log query topic");
+    } else {
+        ESP_LOGI(TAG, "✅ Subscribed to error log query: %s", MQTT_TOPIC_ERROR_LOG_QUERY);
+    }
+
+    // Subscribe to error log clear
+    ret = esp_mqtt_client_subscribe(mqtt_client, MQTT_TOPIC_ERROR_LOG_CLEAR, 1);
+    if (ret == -1) {
+        ESP_LOGW(TAG, "Failed to subscribe to error log clear topic");
+    } else {
+        ESP_LOGI(TAG, "✅ Subscribed to error log clear: %s", MQTT_TOPIC_ERROR_LOG_CLEAR);
+    }
+
     ESP_LOGI(TAG, "Subscribed to all MQTT control topics");
     return ESP_OK;
 }
@@ -1826,6 +1854,28 @@ esp_err_t mqtt_publish_validation_mismatches(const char *json_payload) {
     int msg_id = esp_mqtt_client_publish(mqtt_client, MQTT_TOPIC_VALIDATION_MISMATCHES, json_payload, 0, 1, true);
     if (msg_id != -1) {
         ESP_LOGI(TAG, "📤 Published validation mismatches");
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
+
+esp_err_t mqtt_publish_error_log_response(const char *json_payload) {
+    if (!thread_safe_get_mqtt_connected()) return ESP_ERR_INVALID_STATE;
+
+    int msg_id = esp_mqtt_client_publish(mqtt_client, MQTT_TOPIC_ERROR_LOG_RESPONSE, json_payload, 0, 1, false);
+    if (msg_id != -1) {
+        ESP_LOGI(TAG, "📤 Published error log response");
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
+
+esp_err_t mqtt_publish_error_log_stats(const char *json_payload) {
+    if (!thread_safe_get_mqtt_connected()) return ESP_ERR_INVALID_STATE;
+
+    int msg_id = esp_mqtt_client_publish(mqtt_client, MQTT_TOPIC_ERROR_LOG_STATS, json_payload, 0, 1, true);
+    if (msg_id != -1) {
+        ESP_LOGI(TAG, "📤 Published error log statistics");
         return ESP_OK;
     }
     return ESP_FAIL;

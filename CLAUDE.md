@@ -203,6 +203,33 @@ home/[DEVICE_NAME]/validation/statistics
 - Test transitions: HA Button "Test Transitions" (gentle refresh)
 - See [docs/user/led-validation-guide.md](docs/user/led-validation-guide.md) for complete guide
 
+### Error Logging MQTT Topics (Oct 2025)
+**Persistent Error Storage** - 50-entry circular buffer in NVS, survives reboots
+
+```bash
+# Query error log (retrieve recent errors)
+home/[DEVICE_NAME]/error_log/query
+  → {"count": 10}  # Request 10 recent errors (max: 50)
+
+# Error log response
+home/[DEVICE_NAME]/error_log/response
+  → {"entries": [{"timestamp": "...", "source": "LED_VALIDATION", "message": "..."}], "count": 10}
+
+# Error log statistics (auto-published on MQTT connect)
+home/[DEVICE_NAME]/error_log/stats
+  → {"total_errors": 145, "errors_by_source": {...}, "errors_by_severity": {...}}
+
+# Clear error log
+home/[DEVICE_NAME]/error_log/clear
+  → "clear"        # Clear entries, preserve stats
+  → "reset_stats"  # Reset statistics counters
+```
+
+**Error Sources:** LED_VALIDATION, I2C_BUS, WIFI, MQTT, NTP, SYSTEM, POWER, SENSOR
+**Severities:** INFO, WARNING, ERROR, CRITICAL
+**Storage:** ~5.6KB (50 entries × 112 bytes), persists across reboots
+**See:** [docs/user/error-logging-guide.md](docs/user/error-logging-guide.md) for complete guide
+
 ## Build Configuration
 
 ### ESP-IDF Settings

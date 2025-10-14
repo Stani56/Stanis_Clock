@@ -47,6 +47,7 @@
 #include "thread_safety.h"
 #include "wordclock_mqtt_handlers.h"
 #include "led_validation.h"
+#include "error_log_manager.h"
 
 static const char *TAG = "wordclock";
 
@@ -224,6 +225,12 @@ static esp_err_t initialize_network(void)
     ret = mqtt_discovery_init();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "MQTT discovery init failed");
+    }
+
+    // Initialize error log manager
+    ret = error_log_init();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Error log manager init failed - continuing without persistent error logging");
     }
 
     // Initialize LED validation system

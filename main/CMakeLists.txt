@@ -1,3 +1,3 @@
-idf_component_register(SRCS "wordclock_mqtt_handlers.c" "wordclock_transitions.c" "wordclock_brightness.c" "wordclock_display.c" "thread_safety.c" "wordclock.c"
+idf_component_register(SRCS "wordclock_mqtt_handlers.c" "wordclock_error_log_mqtt.c" "wordclock_transitions.c" "wordclock_brightness.c" "wordclock_display.c" "thread_safety.c" "wordclock.c"
                     INCLUDE_DIRS "."
-                    REQUIRES "freertos" "i2c_devices" "wordclock_time" "adc_manager" "light_sensor" "button_manager" "status_led_manager" "nvs_manager" "wifi_manager" "ntp_manager" "mqtt_manager" "web_server" "transition_manager" "brightness_config" "mqtt_schema_validator" "mqtt_command_processor" "mqtt_message_persistence" "mqtt_discovery" "led_validation")
+                    REQUIRES "freertos" "i2c_devices" "wordclock_time" "adc_manager" "light_sensor" "button_manager" "status_led_manager" "nvs_manager" "wifi_manager" "ntp_manager" "mqtt_manager" "web_server" "transition_manager" "brightness_config" "mqtt_schema_validator" "mqtt_command_processor" "mqtt_message_persistence" "mqtt_discovery" "led_validation" "error_log_manager")

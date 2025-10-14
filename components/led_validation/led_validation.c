@@ -5,6 +5,7 @@
 #include "thread_safety.h"      // For LED state mutex functions
 #include "transition_manager.h" // For transition_manager_is_active()
 #include "mqtt_manager.h"       // For MQTT publishing
+#include "error_log_manager.h"  // For persistent error logging
 #include "nvs_flash.h"          // For NVS configuration storage
 #include "nvs.h"
 #include "esp_log.h"
@@ -1181,6 +1182,38 @@ esp_err_t trigger_validation_post_transition(void)
             ESP_LOGW(TAG, "    [%d][%d] expected=%d software=%d hardware=%d",
                      m->row, m->col, m->expected, m->software, m->hardware);
         }
+
+        // Write error to persistent log
+        validation_error_context_t ctx = {
+            .mismatch_count = result.hardware_mismatch_count,
+            .failure_type = (uint8_t)failure,
+            .affected_rows = {0}
+        };
+
+        // Build bitmask of affected rows (up to 10 rows)
+        for (uint8_t i = 0; i < result.hardware_mismatch_count && i < 50; i++) {
+            if (result.mismatches[i].row < 10) {
+                ctx.affected_rows[result.mismatches[i].row / 8] |= (1 << (result.mismatches[i].row % 8));
+            }
+        }
+
+        // Determine severity based on failure type
+        error_severity_t severity;
+        if (failure == FAILURE_HARDWARE_FAULT || failure == FAILURE_I2C_BUS_FAILURE) {
+            severity = ERROR_SEVERITY_CRITICAL;
+        } else if (failure == FAILURE_SYSTEMATIC_MISMATCH) {
+            severity = ERROR_SEVERITY_ERROR;
+        } else {
+            severity = ERROR_SEVERITY_WARNING;
+        }
+
+        // Create human-readable message
+        char error_msg[64];
+        snprintf(error_msg, sizeof(error_msg), "Validation failed: %s (%d mismatches)",
+                 get_failure_type_name(failure), result.hardware_mismatch_count);
+
+        ERROR_LOG_CONTEXT(ERROR_SOURCE_LED_VALIDATION, severity, failure,
+                          error_msg, &ctx, sizeof(ctx));
     } else {
         ESP_LOGI(TAG, "✅ Post-transition validation PASSED");
     }
