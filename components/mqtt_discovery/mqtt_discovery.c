@@ -503,6 +503,223 @@ esp_err_t mqtt_discovery_publish_sensors(void)
     return ret;
 }
 
+// Publish LED validation sensor discoveries
+esp_err_t mqtt_discovery_publish_validation_sensors(void)
+{
+    esp_err_t ret = ESP_OK;
+    char unique_id[64];
+
+    // Validation Status Sensor
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config) {
+            add_base_topic(config);
+            cJSON_AddStringToObject(config, "name", "LED Validation Status");
+            snprintf(unique_id, sizeof(unique_id), "%s_validation_status", discovery_config.device_id);
+            cJSON_AddStringToObject(config, "unique_id", unique_id);
+            cJSON_AddStringToObject(config, "state_topic", "~/validation/status");
+            cJSON_AddStringToObject(config, "value_template", "{{ value_json.result }}");
+            cJSON_AddStringToObject(config, "icon", "mdi:check-circle");
+            cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+            cJSON *device = create_device_json();
+            if (device) cJSON_AddItemToObject(config, "device", device);
+
+            ret = publish_discovery_config("sensor", "validation_status", config, true);
+            cJSON_Delete(config);
+            if (ret != ESP_OK) return ret;
+        }
+    }
+
+    // Validation Health Score Sensor
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config) {
+            add_base_topic(config);
+            cJSON_AddStringToObject(config, "name", "LED Validation Health Score");
+            snprintf(unique_id, sizeof(unique_id), "%s_validation_health", discovery_config.device_id);
+            cJSON_AddStringToObject(config, "unique_id", unique_id);
+            cJSON_AddStringToObject(config, "state_topic", "~/validation/statistics");
+            cJSON_AddStringToObject(config, "unit_of_measurement", "%");
+            cJSON_AddStringToObject(config, "value_template", "{{ value_json.health_score }}");
+            cJSON_AddStringToObject(config, "icon", "mdi:heart-pulse");
+            cJSON_AddStringToObject(config, "state_class", "measurement");
+            cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+            cJSON *device = create_device_json();
+            if (device) cJSON_AddItemToObject(config, "device", device);
+
+            ret = publish_discovery_config("sensor", "validation_health", config, true);
+            cJSON_Delete(config);
+            if (ret != ESP_OK) return ret;
+        }
+    }
+
+    // Last Validation Time Sensor
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config) {
+            add_base_topic(config);
+            cJSON_AddStringToObject(config, "name", "Last Validation Time");
+            snprintf(unique_id, sizeof(unique_id), "%s_validation_last_time", discovery_config.device_id);
+            cJSON_AddStringToObject(config, "unique_id", unique_id);
+            cJSON_AddStringToObject(config, "state_topic", "~/validation/status");
+            cJSON_AddStringToObject(config, "device_class", "timestamp");
+            cJSON_AddStringToObject(config, "value_template", "{{ value_json.timestamp }}");
+            cJSON_AddStringToObject(config, "icon", "mdi:clock-outline");
+            cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+            cJSON *device = create_device_json();
+            if (device) cJSON_AddItemToObject(config, "device", device);
+
+            ret = publish_discovery_config("sensor", "validation_last_time", config, true);
+            cJSON_Delete(config);
+            if (ret != ESP_OK) return ret;
+        }
+    }
+
+    // Total Validations Count Sensor
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config) {
+            add_base_topic(config);
+            cJSON_AddStringToObject(config, "name", "Total Validations");
+            snprintf(unique_id, sizeof(unique_id), "%s_validation_total", discovery_config.device_id);
+            cJSON_AddStringToObject(config, "unique_id", unique_id);
+            cJSON_AddStringToObject(config, "state_topic", "~/validation/statistics");
+            cJSON_AddStringToObject(config, "value_template", "{{ value_json.total_validations }}");
+            cJSON_AddStringToObject(config, "icon", "mdi:counter");
+            cJSON_AddStringToObject(config, "state_class", "total_increasing");
+            cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+            cJSON *device = create_device_json();
+            if (device) cJSON_AddItemToObject(config, "device", device);
+
+            ret = publish_discovery_config("sensor", "validation_total", config, true);
+            cJSON_Delete(config);
+            if (ret != ESP_OK) return ret;
+        }
+    }
+
+    // Failed Validations Count Sensor
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config) {
+            add_base_topic(config);
+            cJSON_AddStringToObject(config, "name", "Failed Validations");
+            snprintf(unique_id, sizeof(unique_id), "%s_validation_failed", discovery_config.device_id);
+            cJSON_AddStringToObject(config, "unique_id", unique_id);
+            cJSON_AddStringToObject(config, "state_topic", "~/validation/statistics");
+            cJSON_AddStringToObject(config, "value_template", "{{ value_json.validations_failed }}");
+            cJSON_AddStringToObject(config, "icon", "mdi:alert-circle");
+            cJSON_AddStringToObject(config, "state_class", "total_increasing");
+            cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+            cJSON *device = create_device_json();
+            if (device) cJSON_AddItemToObject(config, "device", device);
+
+            ret = publish_discovery_config("sensor", "validation_failed", config, true);
+            cJSON_Delete(config);
+            if (ret != ESP_OK) return ret;
+        }
+    }
+
+    // Hardware Faults Count Sensor
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config) {
+            add_base_topic(config);
+            cJSON_AddStringToObject(config, "name", "Hardware Faults");
+            snprintf(unique_id, sizeof(unique_id), "%s_hardware_faults", discovery_config.device_id);
+            cJSON_AddStringToObject(config, "unique_id", unique_id);
+            cJSON_AddStringToObject(config, "state_topic", "~/validation/statistics");
+            cJSON_AddStringToObject(config, "value_template", "{{ value_json.hardware_fault_count }}");
+            cJSON_AddStringToObject(config, "icon", "mdi:chip");
+            cJSON_AddStringToObject(config, "state_class", "total_increasing");
+            cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+            cJSON *device = create_device_json();
+            if (device) cJSON_AddItemToObject(config, "device", device);
+
+            ret = publish_discovery_config("sensor", "hardware_faults", config, true);
+            cJSON_Delete(config);
+            if (ret != ESP_OK) return ret;
+        }
+    }
+
+    // I2C Bus Failures Count Sensor
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config) {
+            add_base_topic(config);
+            cJSON_AddStringToObject(config, "name", "I2C Bus Failures");
+            snprintf(unique_id, sizeof(unique_id), "%s_i2c_failures", discovery_config.device_id);
+            cJSON_AddStringToObject(config, "unique_id", unique_id);
+            cJSON_AddStringToObject(config, "state_topic", "~/validation/statistics");
+            cJSON_AddStringToObject(config, "value_template", "{{ value_json.i2c_bus_failure_count }}");
+            cJSON_AddStringToObject(config, "icon", "mdi:swap-horizontal");
+            cJSON_AddStringToObject(config, "state_class", "total_increasing");
+            cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+            cJSON *device = create_device_json();
+            if (device) cJSON_AddItemToObject(config, "device", device);
+
+            ret = publish_discovery_config("sensor", "i2c_failures", config, true);
+            cJSON_Delete(config);
+            if (ret != ESP_OK) return ret;
+        }
+    }
+
+    // Consecutive Failures Sensor
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config) {
+            add_base_topic(config);
+            cJSON_AddStringToObject(config, "name", "Consecutive Failures");
+            snprintf(unique_id, sizeof(unique_id), "%s_consecutive_failures", discovery_config.device_id);
+            cJSON_AddStringToObject(config, "unique_id", unique_id);
+            cJSON_AddStringToObject(config, "state_topic", "~/validation/statistics");
+            cJSON_AddStringToObject(config, "value_template", "{{ value_json.consecutive_failures }}");
+            cJSON_AddStringToObject(config, "icon", "mdi:alert-circle-outline");
+            cJSON_AddStringToObject(config, "state_class", "measurement");
+            cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+            cJSON *device = create_device_json();
+            if (device) cJSON_AddItemToObject(config, "device", device);
+
+            ret = publish_discovery_config("sensor", "consecutive_failures", config, true);
+            cJSON_Delete(config);
+            if (ret != ESP_OK) return ret;
+        }
+    }
+
+    // Validation Execution Time Sensor
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config) {
+            add_base_topic(config);
+            cJSON_AddStringToObject(config, "name", "Validation Execution Time");
+            snprintf(unique_id, sizeof(unique_id), "%s_validation_exec_time", discovery_config.device_id);
+            cJSON_AddStringToObject(config, "unique_id", unique_id);
+            cJSON_AddStringToObject(config, "state_topic", "~/validation/status");
+            cJSON_AddStringToObject(config, "unit_of_measurement", "ms");
+            cJSON_AddStringToObject(config, "value_template", "{{ value_json.execution_time_ms }}");
+            cJSON_AddStringToObject(config, "icon", "mdi:timer");
+            cJSON_AddStringToObject(config, "state_class", "measurement");
+            cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+            cJSON *device = create_device_json();
+            if (device) cJSON_AddItemToObject(config, "device", device);
+
+            ret = publish_discovery_config("sensor", "validation_exec_time", config, true);
+            cJSON_Delete(config);
+            if (ret != ESP_OK) return ret;
+        }
+    }
+
+    return ret;
+}
+
 // Publish switch discoveries
 esp_err_t mqtt_discovery_publish_switches(void)
 {
@@ -1058,7 +1275,14 @@ esp_err_t mqtt_discovery_publish_all(void)
         ESP_LOGE(TAG, "Failed to publish sensor discoveries");
         return ret;
     }
-    
+
+    // Publish LED validation sensors
+    ret = mqtt_discovery_publish_validation_sensors();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to publish validation sensor discoveries");
+        return ret;
+    }
+
     // Publish switches
     ret = mqtt_discovery_publish_switches();
     if (ret != ESP_OK) {

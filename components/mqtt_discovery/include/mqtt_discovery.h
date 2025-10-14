@@ -57,6 +57,7 @@ esp_err_t mqtt_discovery_remove_all(void);
 // Individual discovery publish functions
 esp_err_t mqtt_discovery_publish_light(void);
 esp_err_t mqtt_discovery_publish_sensors(void);
+esp_err_t mqtt_discovery_publish_validation_sensors(void);
 esp_err_t mqtt_discovery_publish_switches(void);
 esp_err_t mqtt_discovery_publish_numbers(void);
 esp_err_t mqtt_discovery_publish_selects(void);
