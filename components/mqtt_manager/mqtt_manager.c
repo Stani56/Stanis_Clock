@@ -1820,6 +1820,17 @@ esp_err_t mqtt_publish_validation_statistics(const char *json_payload) {
     return ESP_FAIL;
 }
 
+esp_err_t mqtt_publish_validation_mismatches(const char *json_payload) {
+    if (!thread_safe_get_mqtt_connected()) return ESP_ERR_INVALID_STATE;
+
+    int msg_id = esp_mqtt_client_publish(mqtt_client, MQTT_TOPIC_VALIDATION_MISMATCHES, json_payload, 0, 1, true);
+    if (msg_id != -1) {
+        ESP_LOGI(TAG, "📤 Published validation mismatches");
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
+
 esp_err_t mqtt_publish_wifi_status(bool connected) {
     if (!thread_safe_get_mqtt_connected()) return ESP_ERR_INVALID_STATE;
     

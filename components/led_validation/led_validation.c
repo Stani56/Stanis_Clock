@@ -1038,14 +1038,8 @@ static void validation_task(void *pvParameters)
                 }
                 snprintf(mismatch_json + pos, sizeof(mismatch_json) - pos, "]}");
 
-                // Create new MQTT topic for mismatches
-                char mismatch_topic[128];
-                snprintf(mismatch_topic, sizeof(mismatch_topic),
-                    "home/" MQTT_DEVICE_NAME "/validation/mismatches");
-
-                // Publish using the generic publish function (need to add this)
-                // For now, log it - we'll need to add a generic publish function
-                ESP_LOGI(TAG, "Mismatch details: %s", mismatch_json);
+                // Publish mismatch details to MQTT
+                mqtt_publish_validation_mismatches(mismatch_json);
             }
 
             // Build and publish statistics JSON

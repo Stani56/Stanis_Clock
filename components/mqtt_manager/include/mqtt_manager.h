@@ -45,6 +45,7 @@ extern "C" {
 #define MQTT_TOPIC_VALIDATION_STATUS MQTT_TOPIC_BASE "/validation/status"
 #define MQTT_TOPIC_VALIDATION_LAST_RESULT MQTT_TOPIC_BASE "/validation/last_result"
 #define MQTT_TOPIC_VALIDATION_STATISTICS MQTT_TOPIC_BASE "/validation/statistics"
+#define MQTT_TOPIC_VALIDATION_MISMATCHES MQTT_TOPIC_BASE "/validation/mismatches"
 
 // MQTT Status Messages
 #define MQTT_STATUS_ONLINE "online"
@@ -95,6 +96,7 @@ esp_err_t mqtt_publish_heartbeat_with_ntp(void);
 esp_err_t mqtt_publish_validation_status(const char *result, const char *timestamp, uint32_t execution_time_ms);
 esp_err_t mqtt_publish_validation_last_result(const char *json_payload);
 esp_err_t mqtt_publish_validation_statistics(const char *json_payload);
+esp_err_t mqtt_publish_validation_mismatches(const char *json_payload);
 
 // Configuration Functions
 esp_err_t mqtt_load_config(mqtt_config_t *config);

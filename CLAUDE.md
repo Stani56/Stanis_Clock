@@ -177,6 +177,32 @@ home/[DEVICE_NAME]/transition/set: {"duration": 1500, "enabled": true}
 home/[DEVICE_NAME]/brightness/config/reset: "reset"
 ```
 
+### LED Validation MQTT Topics (Oct 2025)
+**Manual Recovery Workflow** - Auto-recovery disabled, user approval required
+
+```bash
+# Validation status (published every ~5 minutes after transitions)
+home/[DEVICE_NAME]/validation/status
+  → {"result": "passed", "timestamp": "2025-10-14T11:15:00Z", "execution_time_ms": 131}
+
+# Detailed validation results
+home/[DEVICE_NAME]/validation/last_result
+  → {"software_valid": true, "hardware_valid": true, "mismatches": 0, "failure_type": "NONE"}
+
+# Mismatch details (only published when mismatches detected)
+home/[DEVICE_NAME]/validation/mismatches
+  → {"count": 5, "leds": [{"r": 0, "c": 2, "exp": 0, "sw": 0, "hw": 60, "diff": 60}, ...]}
+
+# Validation statistics and health score
+home/[DEVICE_NAME]/validation/statistics
+  → {"total_validations": 100, "failed": 2, "health_score": 95, ...}
+```
+
+**Recovery Actions:**
+- Restart system: `home/[DEVICE_NAME]/command` → "restart"
+- Test transitions: HA Button "Test Transitions" (gentle refresh)
+- See [docs/user/led-validation-guide.md](docs/user/led-validation-guide.md) for complete guide
+
 ## Build Configuration
 
 ### ESP-IDF Settings
