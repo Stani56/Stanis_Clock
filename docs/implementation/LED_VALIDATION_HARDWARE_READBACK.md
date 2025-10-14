@@ -43,6 +43,45 @@ The TLC59116 supports reading back several registers that reflect the actual har
 - **Function:** LED open-circuit and short-circuit detection
 - **Readable:** ✅ YES - Hardware fault detection
 
+**⚠️ IMPORTANT: EFLAG Error Detection Currently Disabled**
+
+The TLC59116 EFLAG error detection feature is **intentionally disabled** in the current implementation:
+
+```c
+// In i2c_devices.c line 283:
+uint8_t mode2_val = 0x00;  // EFAIL bit (bit 0) = 0 → Error detection OFF
+```
+
+**Why Disabled:**
+- **Partially Populated LED Matrix:** The word clock has only 160 LEDs connected across 10 TLC59116 controllers (16 outputs each = 160 total possible)
+- **Actual Usage:** Only 11 LEDs per controller are used on average (rows 0-8), 4 LEDs on row 9 (minute indicators)
+- **Unconnected Outputs:** ~90 LED outputs are intentionally left unconnected
+- **False Positives:** With EFLAG enabled, all unconnected outputs would continuously report open-circuit errors
+
+**Current Behavior:**
+- EFLAG registers are read but always return 0x00 (no errors)
+- Open-circuit and short-circuit detection is inactive
+- Hardware fault detection relies on PWM readback mismatches instead
+
+**To Enable Error Detection (if needed):**
+```c
+// Change MODE2 register in TLC59116 initialization:
+uint8_t mode2_val = 0x01;  // Set EFAIL bit to enable error detection
+
+// Result: EFLAG registers will report:
+// - Bit set = LED open circuit (unconnected)
+// - Bit clear = LED okay or short circuit
+```
+
+**Trade-off:**
+- **Enabled:** Detects actual LED failures but floods logs with false positives from unconnected outputs
+- **Disabled (Current):** No false positives, but misses detection of LED open/short circuits on connected LEDs
+
+**Alternative Detection Method:**
+The validation system still detects LED failures through **PWM readback comparison**:
+- If a connected LED has an open/short circuit, its PWM will read differently than expected
+- This provides adequate fault detection without false positives from unconnected outputs
+
 ---
 
 ## Enhanced Validation Architecture

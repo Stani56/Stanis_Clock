@@ -152,6 +152,14 @@ Very Bright: 500-1500 lux → 200-255 brightness
 - Each PWM register read independently with explicit address
 - See [docs/implementation/tlc59116-validation-fix.md](docs/implementation/tlc59116-validation-fix.md) for detailed analysis
 
+**EFLAG Error Detection (Intentionally Disabled):**
+- TLC59116 MODE2 register bit 0 (EFAIL) is set to 0 (disabled)
+- Reason: ~90 unconnected LED outputs would continuously report false open-circuit errors
+- Trade-off: No false positives from partially populated LED matrix, but misses actual LED open/short detection
+- Alternative: PWM readback comparison still detects LED failures without false positives
+- To enable: Change `mode2_val = 0x00` to `0x01` in i2c_devices.c line 283
+- See [docs/implementation/LED_VALIDATION_HARDWARE_READBACK.md](docs/implementation/LED_VALIDATION_HARDWARE_READBACK.md) section on EFLAG registers
+
 ## Home Assistant Integration
 
 ### MQTT Discovery (36 Entities)
