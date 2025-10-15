@@ -71,6 +71,10 @@ esp_err_t thread_safe_set_global_brightness(uint8_t brightness);
 uint8_t thread_safe_get_potentiometer_brightness(void);
 esp_err_t thread_safe_set_potentiometer_brightness(uint8_t brightness);
 
+// Time expression style thread-safe accessors (uses brightness mutex)
+bool thread_safe_get_halb_centric_style(void);
+esp_err_t thread_safe_set_halb_centric_style(bool enabled);
+
 // LED state synchronization helpers
 esp_err_t thread_safe_led_state_lock(TickType_t timeout);
 void thread_safe_led_state_unlock(void);

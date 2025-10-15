@@ -11,7 +11,6 @@
 #include "i2c_devices.h"
 #include "wordclock_time.h"
 #include "thread_safety.h"
-#include "brightness_config.h"
 #include "esp_log.h"
 #include <string.h>
 #include <stdio.h>
@@ -188,7 +187,7 @@ esp_err_t build_led_state_matrix(const wordclock_time_t *time,
             set_word_leds(new_led_state, "NACH", brightness);
             break;
         case 20:
-            if (brightness_config_get_halb_centric_style()) {
+            if (thread_safe_get_halb_centric_style()) {
                 // HALB-centric: "ES IST ZEHN VOR HALB" (using next hour)
                 set_word_leds(new_led_state, "ZEHN_M", brightness);
                 set_word_leds(new_led_state, "VOR", brightness);
@@ -213,7 +212,7 @@ esp_err_t build_led_state_matrix(const wordclock_time_t *time,
             set_word_leds(new_led_state, "HALB", brightness);
             break;
         case 40:
-            if (brightness_config_get_halb_centric_style()) {
+            if (thread_safe_get_halb_centric_style()) {
                 // HALB-centric: "ES IST ZEHN NACH HALB" (using next hour)
                 set_word_leds(new_led_state, "ZEHN_M", brightness);
                 set_word_leds(new_led_state, "NACH", brightness);
@@ -225,7 +224,7 @@ esp_err_t build_led_state_matrix(const wordclock_time_t *time,
             }
             break;
         case 45:
-            if (brightness_config_get_halb_centric_style()) {
+            if (thread_safe_get_halb_centric_style()) {
                 // HALB-centric: "ES IST DREIVIERTEL" (using next hour)
                 set_word_leds(new_led_state, "DREIVIERTEL", brightness);
             } else {

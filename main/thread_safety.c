@@ -210,6 +210,21 @@ esp_err_t thread_safe_set_potentiometer_brightness(uint8_t brightness)
     return ESP_ERR_INVALID_STATE;
 }
 
+// Time expression style thread-safe accessors (uses brightness mutex)
+bool thread_safe_get_halb_centric_style(void)
+{
+    // Calls brightness_config directly (already thread-safe internally)
+    extern bool brightness_config_get_halb_centric_style(void);
+    return brightness_config_get_halb_centric_style();
+}
+
+esp_err_t thread_safe_set_halb_centric_style(bool enabled)
+{
+    // Calls brightness_config directly (already thread-safe internally)
+    extern esp_err_t brightness_config_set_halb_centric_style(bool enabled);
+    return brightness_config_set_halb_centric_style(enabled);
+}
+
 // LED state synchronization helpers
 esp_err_t thread_safe_led_state_lock(TickType_t timeout)
 {
