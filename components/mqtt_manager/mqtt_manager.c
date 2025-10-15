@@ -1607,7 +1607,21 @@ static esp_err_t mqtt_handle_brightness_config_set(const char* payload, int payl
             ESP_LOGW(TAG, "Failed to update potentiometer config: %s", esp_err_to_name(ret));
         }
     }
-    
+
+    // Handle time expression style configuration (HALB-centric vs NACH/VOR)
+    cJSON *halb_style = cJSON_GetObjectItem(json, "halb_centric_style");
+    if (halb_style != NULL && cJSON_IsBool(halb_style)) {
+        bool enabled = cJSON_IsTrue(halb_style);
+        esp_err_t ret = brightness_config_set_halb_centric_style(enabled);
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "Updated time expression style: %s",
+                     enabled ? "HALB-centric" : "NACH/VOR");
+            config_changed = true;
+        } else {
+            ESP_LOGW(TAG, "Failed to update time expression style: %s", esp_err_to_name(ret));
+        }
+    }
+
     // Save configuration to NVS if anything changed (with debouncing protection)
     if (config_changed) {
         uint32_t current_time = xTaskGetTickCount() * portTICK_PERIOD_MS;
@@ -2035,7 +2049,11 @@ esp_err_t mqtt_publish_brightness_config_status(void) {
             cJSON_AddItemToObject(json, "potentiometer", potentiometer);
         }
     }
-    
+
+    // Add time expression style configuration (HALB-centric vs NACH/VOR)
+    bool halb_centric_enabled = brightness_config_get_halb_centric_style();
+    cJSON_AddBoolToObject(json, "halb_centric_style", halb_centric_enabled);
+
     // Convert to string and publish
     char *json_string = cJSON_Print(json);
     esp_err_t result = ESP_FAIL;

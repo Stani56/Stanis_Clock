@@ -724,31 +724,62 @@ esp_err_t mqtt_discovery_publish_validation_sensors(void)
 esp_err_t mqtt_discovery_publish_switches(void)
 {
     char unique_id[64];
-    
+    esp_err_t ret = ESP_OK;
+
     // Smooth Transitions Switch
-    cJSON *config = cJSON_CreateObject();
-    if (config == NULL) return ESP_ERR_NO_MEM;
-    
-    add_base_topic(config);
-    cJSON_AddStringToObject(config, "name", "Smooth Transitions");
-    snprintf(unique_id, sizeof(unique_id), "%s_transitions", discovery_config.device_id);
-    cJSON_AddStringToObject(config, "unique_id", unique_id);
-    cJSON_AddStringToObject(config, "state_topic", "~/transition/status");
-    cJSON_AddStringToObject(config, "command_topic", "~/transition/set");
-    cJSON_AddStringToObject(config, "value_template", "{{ value_json.enabled }}");
-    cJSON_AddStringToObject(config, "payload_on", "{\"enabled\": true}");
-    cJSON_AddStringToObject(config, "payload_off", "{\"enabled\": false}");
-    cJSON_AddBoolToObject(config, "state_on", true);
-    cJSON_AddBoolToObject(config, "state_off", false);
-    cJSON_AddStringToObject(config, "icon", "mdi:transition");
-    cJSON_AddStringToObject(config, "availability_topic", "~/availability");
-    
-    cJSON *device = create_device_json();
-    if (device) cJSON_AddItemToObject(config, "device", device);
-    
-    esp_err_t ret = publish_discovery_config("switch", "transitions", config, true);
-    cJSON_Delete(config);
-    
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config == NULL) return ESP_ERR_NO_MEM;
+
+        add_base_topic(config);
+        cJSON_AddStringToObject(config, "name", "Smooth Transitions");
+        snprintf(unique_id, sizeof(unique_id), "%s_transitions", discovery_config.device_id);
+        cJSON_AddStringToObject(config, "unique_id", unique_id);
+        cJSON_AddStringToObject(config, "state_topic", "~/transition/status");
+        cJSON_AddStringToObject(config, "command_topic", "~/transition/set");
+        cJSON_AddStringToObject(config, "value_template", "{{ value_json.enabled }}");
+        cJSON_AddStringToObject(config, "payload_on", "{\"enabled\": true}");
+        cJSON_AddStringToObject(config, "payload_off", "{\"enabled\": false}");
+        cJSON_AddBoolToObject(config, "state_on", true);
+        cJSON_AddBoolToObject(config, "state_off", false);
+        cJSON_AddStringToObject(config, "icon", "mdi:transition");
+        cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+        cJSON *device = create_device_json();
+        if (device) cJSON_AddItemToObject(config, "device", device);
+
+        ret = publish_discovery_config("switch", "transitions", config, true);
+        cJSON_Delete(config);
+        if (ret != ESP_OK) return ret;
+    }
+
+    // HALB-Centric Time Expression Style Switch
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config == NULL) return ESP_ERR_NO_MEM;
+
+        add_base_topic(config);
+        cJSON_AddStringToObject(config, "name", "HALB-Centric Time Style");
+        snprintf(unique_id, sizeof(unique_id), "%s_halb_centric_style", discovery_config.device_id);
+        cJSON_AddStringToObject(config, "unique_id", unique_id);
+        cJSON_AddStringToObject(config, "state_topic", "~/brightness/config/status");
+        cJSON_AddStringToObject(config, "command_topic", "~/brightness/config/set");
+        cJSON_AddStringToObject(config, "value_template", "{{ value_json.halb_centric_style }}");
+        cJSON_AddStringToObject(config, "payload_on", "{\"halb_centric_style\": true}");
+        cJSON_AddStringToObject(config, "payload_off", "{\"halb_centric_style\": false}");
+        cJSON_AddBoolToObject(config, "state_on", true);
+        cJSON_AddBoolToObject(config, "state_off", false);
+        cJSON_AddStringToObject(config, "icon", "mdi:clock-time-three");
+        cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+        cJSON *device = create_device_json();
+        if (device) cJSON_AddItemToObject(config, "device", device);
+
+        ret = publish_discovery_config("switch", "halb_centric_style", config, true);
+        cJSON_Delete(config);
+        if (ret != ESP_OK) return ret;
+    }
+
     return ret;
 }
 
