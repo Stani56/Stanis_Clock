@@ -11,6 +11,7 @@
 #include "i2c_devices.h"
 #include "wordclock_time.h"
 #include "thread_safety.h"
+#include "brightness_config.h"
 #include "esp_log.h"
 #include <string.h>
 #include <stdio.h>
@@ -187,8 +188,16 @@ esp_err_t build_led_state_matrix(const wordclock_time_t *time,
             set_word_leds(new_led_state, "NACH", brightness);
             break;
         case 20:
-            set_word_leds(new_led_state, "ZWANZIG", brightness);
-            set_word_leds(new_led_state, "NACH", brightness);
+            if (brightness_config_get_halb_centric_style()) {
+                // HALB-centric: "ES IST ZEHN VOR HALB" (using next hour)
+                set_word_leds(new_led_state, "ZEHN_M", brightness);
+                set_word_leds(new_led_state, "VOR", brightness);
+                set_word_leds(new_led_state, "HALB", brightness);
+            } else {
+                // Default: "ES IST ZWANZIG NACH"
+                set_word_leds(new_led_state, "ZWANZIG", brightness);
+                set_word_leds(new_led_state, "NACH", brightness);
+            }
             break;
         case 25:
             set_word_leds(new_led_state, "FÜNF_M", brightness);
@@ -204,12 +213,26 @@ esp_err_t build_led_state_matrix(const wordclock_time_t *time,
             set_word_leds(new_led_state, "HALB", brightness);
             break;
         case 40:
-            set_word_leds(new_led_state, "ZWANZIG", brightness);
-            set_word_leds(new_led_state, "VOR", brightness);
+            if (brightness_config_get_halb_centric_style()) {
+                // HALB-centric: "ES IST ZEHN NACH HALB" (using next hour)
+                set_word_leds(new_led_state, "ZEHN_M", brightness);
+                set_word_leds(new_led_state, "NACH", brightness);
+                set_word_leds(new_led_state, "HALB", brightness);
+            } else {
+                // Default: "ES IST ZWANZIG VOR"
+                set_word_leds(new_led_state, "ZWANZIG", brightness);
+                set_word_leds(new_led_state, "VOR", brightness);
+            }
             break;
         case 45:
-            set_word_leds(new_led_state, "VIERTEL", brightness);
-            set_word_leds(new_led_state, "VOR", brightness);
+            if (brightness_config_get_halb_centric_style()) {
+                // HALB-centric: "ES IST DREIVIERTEL" (using next hour)
+                set_word_leds(new_led_state, "DREIVIERTEL", brightness);
+            } else {
+                // Default: "ES IST VIERTEL VOR"
+                set_word_leds(new_led_state, "VIERTEL", brightness);
+                set_word_leds(new_led_state, "VOR", brightness);
+            }
             break;
         case 50:
             set_word_leds(new_led_state, "ZEHN_M", brightness);
