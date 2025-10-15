@@ -98,7 +98,15 @@ esp_err_t brightness_config_save_to_nvs(void)
         nvs_close(nvs_handle);
         return ret;
     }
-    
+
+    // Save HALB-centric style preference
+    ret = nvs_set_u8(nvs_handle, "halb_style", g_brightness_config.use_halb_centric_style ? 1 : 0);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to save halb_centric style: %s", esp_err_to_name(ret));
+        nvs_close(nvs_handle);
+        return ret;
+    }
+
     // Commit changes
     ret = nvs_commit(nvs_handle);
     if (ret != ESP_OK) {
@@ -153,7 +161,23 @@ esp_err_t brightness_config_load_from_nvs(void)
         nvs_close(nvs_handle);
         return ret;
     }
-    
+
+    // Load HALB-centric style preference
+    uint8_t halb_style_val = 0;
+    ret = nvs_get_u8(nvs_handle, "halb_style", &halb_style_val);
+    if (ret == ESP_OK) {
+        g_brightness_config.use_halb_centric_style = (halb_style_val != 0);
+        ESP_LOGI(TAG, "Loaded HALB-centric style: %s",
+                 g_brightness_config.use_halb_centric_style ? "enabled" : "disabled");
+    } else if (ret == ESP_ERR_NVS_NOT_FOUND) {
+        // First boot or old config - use default (false)
+        g_brightness_config.use_halb_centric_style = false;
+        ESP_LOGI(TAG, "HALB-centric style not in NVS, using default: disabled");
+    } else {
+        ESP_LOGW(TAG, "Failed to load HALB-centric style: %s (using default)", esp_err_to_name(ret));
+        g_brightness_config.use_halb_centric_style = false;
+    }
+
     ESP_LOGI(TAG, "Brightness configuration loaded from NVS successfully");
     nvs_close(nvs_handle);
     return ESP_OK;
@@ -174,14 +198,18 @@ esp_err_t brightness_config_reset_to_defaults(void)
     
     g_brightness_config.light_sensor = default_light;
     g_brightness_config.potentiometer = default_pot;
-    
+
+    // Reset HALB-centric style to default
+    g_brightness_config.use_halb_centric_style = false;
+    ESP_LOGI(TAG, "HALB-centric style reset to: disabled");
+
     // Debug: Verify it was set
     ESP_LOGI(TAG, "After reset - very_bright in memory: %.1f-%.1f lux → %d-%d brightness",
              g_brightness_config.light_sensor.very_bright.lux_min,
              g_brightness_config.light_sensor.very_bright.lux_max,
              g_brightness_config.light_sensor.very_bright.brightness_min,
              g_brightness_config.light_sensor.very_bright.brightness_max);
-    
+
     // Save to NVS
     return brightness_config_save_to_nvs();
 }
@@ -409,4 +437,20 @@ brightness_curve_type_t brightness_curve_type_from_string(const char* str)
 uint8_t brightness_config_get_safety_limit_max(void)
 {
     return g_brightness_config.potentiometer.safety_limit_max;
+}
+
+// Get HALB-centric style preference
+bool brightness_config_get_halb_centric_style(void)
+{
+    return g_brightness_config.use_halb_centric_style;
+}
+
+// Set HALB-centric style preference
+esp_err_t brightness_config_set_halb_centric_style(bool enabled)
+{
+    if (g_brightness_config.use_halb_centric_style != enabled) {
+        g_brightness_config.use_halb_centric_style = enabled;
+        ESP_LOGI(TAG, "HALB-centric style set to: %s", enabled ? "enabled" : "disabled");
+    }
+    return ESP_OK;
 }
