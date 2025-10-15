@@ -163,7 +163,17 @@ esp_err_t build_led_state_matrix(const wordclock_time_t *time,
     // Calculate base minutes and indicators
     uint8_t base_minutes = wordclock_calculate_base_minutes(time->minutes);
     uint8_t indicator_count = wordclock_calculate_indicators(time->minutes);
-    uint8_t display_hour = wordclock_get_display_hour(time->hours, base_minutes);
+
+    // Check if HALB-centric style is enabled
+    bool halb_centric = thread_safe_get_halb_centric_style();
+
+    // Calculate display hour - HALB-centric mode needs next hour for :20, :40, :45
+    uint8_t effective_base_minutes = base_minutes;
+    if (halb_centric && (base_minutes == 20 || base_minutes == 40 || base_minutes == 45)) {
+        // Treat these as if they were >= 25 to get the next hour
+        effective_base_minutes = 25;
+    }
+    uint8_t display_hour = wordclock_get_display_hour(time->hours, effective_base_minutes);
 
     // Always show "ES IST"
     set_word_leds(new_led_state, "ES", brightness);
@@ -187,7 +197,7 @@ esp_err_t build_led_state_matrix(const wordclock_time_t *time,
             set_word_leds(new_led_state, "NACH", brightness);
             break;
         case 20:
-            if (thread_safe_get_halb_centric_style()) {
+            if (halb_centric) {
                 // HALB-centric: "ES IST ZEHN VOR HALB" (using next hour)
                 set_word_leds(new_led_state, "ZEHN_M", brightness);
                 set_word_leds(new_led_state, "VOR", brightness);
@@ -212,7 +222,7 @@ esp_err_t build_led_state_matrix(const wordclock_time_t *time,
             set_word_leds(new_led_state, "HALB", brightness);
             break;
         case 40:
-            if (thread_safe_get_halb_centric_style()) {
+            if (halb_centric) {
                 // HALB-centric: "ES IST ZEHN NACH HALB" (using next hour)
                 set_word_leds(new_led_state, "ZEHN_M", brightness);
                 set_word_leds(new_led_state, "NACH", brightness);
@@ -224,7 +234,7 @@ esp_err_t build_led_state_matrix(const wordclock_time_t *time,
             }
             break;
         case 45:
-            if (thread_safe_get_halb_centric_style()) {
+            if (halb_centric) {
                 // HALB-centric: "ES IST DREIVIERTEL" (using next hour)
                 set_word_leds(new_led_state, "DREIVIERTEL", brightness);
             } else {
