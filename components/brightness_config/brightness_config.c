@@ -11,7 +11,8 @@ static const char *TAG = "brightness_config";
 brightness_config_t g_brightness_config = {
     .light_sensor = DEFAULT_LIGHT_SENSOR_CONFIG,
     .potentiometer = DEFAULT_POTENTIOMETER_CONFIG,
-    .is_initialized = false
+    .is_initialized = false,
+    .use_halb_centric_style = false  // Default to NACH/VOR style
 };
 
 // NVS namespace and keys

@@ -48,6 +48,7 @@ typedef struct {
     potentiometer_config_t potentiometer;
     uint8_t global_minimum_brightness;  // Configurable safety minimum (default: 3)
     bool is_initialized;
+    bool use_halb_centric_style;  // HALB-centric time expression style (default: false)
 } brightness_config_t;
 
 // Default configuration values
