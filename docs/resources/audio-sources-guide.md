@@ -237,12 +237,26 @@ E4 - D4 - C4 - G3, C4 - E4 - D4 - G3, E4 - C4 - D4 - G3, G3 - E4 - C4 - D4
 
 Once you have the audio files, process them for ESP32:
 
+### Important: Sampling Rate Decision
+
+**Source Audio:** Many chime files come at 44.1 kHz (CD quality)
+**ESP32 Target:** 16 kHz, 16-bit mono PCM
+
+**Why 16 kHz?**
+- **Storage constraint:** 44.1 kHz requires ~1.68 MB for full Westminster set (doesn't fit in current 1.4 MB available)
+- **16 kHz fits comfortably:** ~608 KB total (45.9 seconds available, ~50 seconds needed)
+- **Quality sufficient:** Westminster chimes are low-frequency bells (16 kHz preserves bell tones well)
+- **Good balance:** Between quality and storage efficiency
+
+**Conversion happens automatically** in the processing script below (via `-ar 16000` flag).
+
 ### Step 1: Convert to Correct Format
 ```bash
 # Install ffmpeg (if not already installed)
 sudo apt-get install ffmpeg
 
-# Convert to 16kHz, 16-bit mono PCM WAV
+# Convert from any sample rate (e.g., 44.1 kHz) to 16 kHz, 16-bit mono PCM WAV
+# The -ar 16000 flag downsamples to 16 kHz automatically
 ffmpeg -i input.wav -ar 16000 -ac 1 -sample_fmt s16 output.wav
 ```
 

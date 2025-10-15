@@ -1,5 +1,46 @@
 # Audio Storage Analysis for ESP32 Word Clock
 
+## Sampling Rate Decision: 16 kHz
+
+**Source Audio:** Many Westminster chime files come at 44.1 kHz (CD quality)
+**ESP32 Target:** **16 kHz, 16-bit mono PCM** ✅
+
+### Why 16 kHz?
+
+| Sample Rate | Full Set Size | Available Space | Fits? | Quality for Chimes |
+|-------------|---------------|-----------------|-------|--------------------|
+| **44.1 kHz** | 1.68 MB | 1.4 MB | ❌ No | Excellent (overkill) |
+| **22.05 kHz** | 840 KB | 1.4 MB | ✅ Yes (tight) | Very Good |
+| **16 kHz** | 608 KB | 1.4 MB | ✅ Yes (comfortable) | Good ✅ |
+| **8 kHz** | 304 KB | 1.4 MB | ✅ Yes (very comfortable) | Acceptable (muffled) |
+
+**Decision: 16 kHz** provides the best balance:
+- ✅ **Fits comfortably:** 608 KB vs 1.4 MB available (45.9 seconds capacity for ~50 seconds of chimes)
+- ✅ **Quality sufficient:** Westminster chimes are low-frequency bells (~200-330 Hz fundamental)
+- ✅ **Nyquist theorem:** 16 kHz captures up to 8 kHz frequencies (far above bell harmonics)
+- ✅ **Storage efficient:** 2.76× smaller than 44.1 kHz
+- ✅ **Conversion handled:** `prepare_chimes.sh` script automatically downsamples via FFmpeg
+
+### Audio Duration Calculations
+
+```
+16 kHz, 16-bit mono PCM data rate:
+16,000 samples/sec × 2 bytes/sample = 32,000 bytes/sec
+
+Available storage: 1,468,006 bytes (1.4 MB)
+Maximum duration: 1,468,006 ÷ 32,000 = 45.9 seconds
+
+Westminster chime set: ~50 seconds total
+- Quarter: ~2 sec (64 KB)
+- Half: ~3 sec (96 KB)
+- Three-quarter: ~5 sec (160 KB)
+- Full: ~8 sec (256 KB)
+- Hour strike: ~1 sec (32 KB)
+Total: ~19 sec = 608 KB ✅ Comfortable fit (42% of available space)
+```
+
+---
+
 ## ESP32 Memory Options for Audio Files
 
 ---
