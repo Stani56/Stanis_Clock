@@ -93,6 +93,10 @@ uint8_t brightness_config_calculate_potentiometer_brightness(uint8_t raw_value);
 const char* brightness_curve_type_to_string(brightness_curve_type_t type);
 brightness_curve_type_t brightness_curve_type_from_string(const char* str);
 
+// Time expression style configuration functions
+bool brightness_config_get_halb_centric_style(void);
+esp_err_t brightness_config_set_halb_centric_style(bool enabled);
+
 #ifdef __cplusplus
 }
 #endif
