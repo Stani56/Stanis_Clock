@@ -90,19 +90,27 @@ GPIO 23: Available ✅
 
 ESP32 has **two SPI buses**: VSPI (default) and HSPI.
 
-**HSPI Pin Assignment:**
+**HSPI Pin Assignment (ESP32-PICO-KIT Verified):**
 ```
 ESP32 GPIO          W25Q Flash Module
 ────────────────    ──────────────────
-GPIO 14 (MOSI)  →   DI (Data In)       ← HSPI MOSI
-GPIO 12 (MISO)  ←   DO (Data Out)      ← HSPI MISO
-GPIO 13 (SCK)   →   CLK (Clock)        ← HSPI SCK
-GPIO 15 (CS)    →   CS (Chip Select)   ← HSPI CS
+GPIO 14 (MOSI)  →   DI (Data In)       ← HSPI MOSI ✅
+GPIO 12 (MISO)  ←   DO (Data Out)      ← HSPI MISO ✅
+GPIO 13 (SCK)   →   CLK (Clock)        ← HSPI SCK  ✅
+GPIO 16 (CS)    →   CS (Chip Select)   ← Use GPIO 16 (not 15!)
 3.3V            →   VCC
 GND             →   GND
 ```
 
-**Advantage:** No conflicts with existing I2C on GPIO 18/19!
+**Advantages:**
+- ✅ No conflicts with existing I2C on GPIO 18/19
+- ✅ Verified available on ESP32-PICO-KIT
+- ✅ GPIO 16 avoids strapping pin issues (GPIO 15 needs pull-up)
+- ✅ No external resistors required
+
+**⚠️ Note:** GPIO 6-11 are reserved for internal flash on ESP32-PICO-D4 (never use these!)
+
+See detailed GPIO analysis: [docs/hardware/esp32-pico-kit-gpio-analysis.md](../hardware/esp32-pico-kit-gpio-analysis.md)
 
 ---
 
@@ -155,11 +163,11 @@ uint32_t external_flash_get_size(void);
 
 static const char *TAG = "ext_flash";
 
-// HSPI pins (no conflict with I2C)
+// HSPI pins (no conflict with I2C, verified for ESP32-PICO-KIT)
 #define PIN_NUM_MISO 12
 #define PIN_NUM_MOSI 14
 #define PIN_NUM_CLK  13
-#define PIN_NUM_CS   15
+#define PIN_NUM_CS   16  // Use GPIO 16 (not 15 - avoids strapping pin issues)
 
 #define SPI_FLASH_SIZE (8 * 1024 * 1024)  // 8 MB (W25Q64)
 
