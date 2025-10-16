@@ -57,16 +57,22 @@ Using these pins will BRICK your device! ⚠️
 
 ### GPIO 15 - ⚠️ STRAPPING PIN (Best Available Option for CS)
 
-**Function:** Boot mode selection
-**Default:** Internal pull-up
-**Risk:** MEDIUM (can interfere with boot if pulled LOW)
+**Function:** Boot debug output / SDIO configuration
+**Default:** Internal ~50kΩ pull-up (active during boot)
+**Risk:** LOW (internal pull-up keeps it HIGH during boot)
 
 **Behavior:**
-- At boot: Must be HIGH for normal boot
-- If LOW at boot: Enters silent/quiet boot mode (can cause issues)
+- At boot: Must be HIGH for normal boot (internal pull-up handles this)
+- If LOW at boot: Mutes UART debug output / changes SDIO mode
 - After boot: Can be used as GPIO
 
-**Safe to use for SPI CS:** ✅ Yes, WITH external 10K pull-up resistor
+**Safe to use for SPI CS:** ✅ Yes, NO external resistor needed!
+
+**Why it's safe for SPI CS:**
+- ESP32 drives CS as output (not input)
+- Internal pull-up keeps CS HIGH during boot (flash not selected)
+- W25Q64 CS input has very low current draw (<1µA)
+- No external components required!
 
 **This is now the BEST option for CS** since GPIO 16/17 are reserved for internal flash!
 
@@ -109,9 +115,9 @@ GPIO 13 (SCK)   →   CLK (Clock)
 GPIO 15 (CS)    →   CS (Chip Select)
 3.3V            →   VCC
 GND             →   GND
-
-REQUIRED: 10K pull-up resistor from GPIO 15 to 3.3V!
 ```
+
+**No external resistor needed!** GPIO 15 has internal ~50kΩ pull-up active during boot.
 
 ---
 
@@ -137,43 +143,16 @@ void app_main(void) {
 
 ### GPIO 15 (CS) - Strapping Pin
 
-**Problem:** Internal pull-up at boot (must stay HIGH)
-**Solution:** Add external 10K pull-up resistor
+**Status:** Internal ~50kΩ pull-up at boot (keeps CS HIGH automatically)
+**Solution:** No external components needed!
 
-**Circuit:**
-```
-GPIO 15 ────┬──── 10K Ω ──── 3.3V
-            │
-            └──── W25Q64 CS pin
-```
+**Why it works:**
+- GPIO 15 has internal pull-up active during boot
+- Keeps CS HIGH (inactive) automatically
+- W25Q64 CS input draws <1µA (doesn't interfere with boot)
+- After boot, ESP32 drives CS as output
 
-**Why:** Ensures CS stays HIGH during boot (inactive state for SPI)
-
-**Alternative (no resistor needed):**
-- Use GPIO 16 or 17 for CS instead (fully available)
-
----
-
-## Better Alternative: Use GPIO 16 or 17 for CS
-
-**Avoid strapping pin issues entirely:**
-
-```
-ESP32 GPIO          W25Q64 Flash
-──────────────      ────────────
-GPIO 14 (MOSI)  →   DI (Data In)
-GPIO 12 (MISO)  ←   DO (Data Out)
-GPIO 13 (SCK)   →   CLK (Clock)
-GPIO 16 (CS)    →   CS (Chip Select)  ← Better choice!
-3.3V            →   VCC
-GND             →   GND
-```
-
-**GPIO 16 & 17 Status:**
-- ✅ Fully available on ESP32-PICO-KIT
-- ✅ No strapping pin issues
-- ✅ No boot-time restrictions
-- ✅ Can be used immediately
+**No circuit required - just direct connection!**
 
 ---
 
