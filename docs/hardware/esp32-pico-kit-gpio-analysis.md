@@ -3,9 +3,9 @@
 
 ---
 
-## ⚠️ CRITICAL: GPIO 6-11 Are NOT Available on ESP32-PICO-KIT
+## ⚠️ CRITICAL: GPIO 6-11, 16-17 Are NOT Available on ESP32-PICO-KIT
 
-**ESP32-PICO-D4 uses internal flash**, which occupies GPIO 6-11 for SPI communication:
+**ESP32-PICO-D4 uses internal flash**, which occupies GPIO 6-11 AND 16-17 for SPI communication:
 
 ```
 Reserved for Internal Flash (DO NOT USE):
@@ -15,9 +15,13 @@ GPIO 8  - Flash SD1
 GPIO 9  - Flash SD2
 GPIO 10 - Flash SD3
 GPIO 11 - Flash CMD
+GPIO 16 - Flash CS   ⚠️ ALSO RESERVED!
+GPIO 17 - Flash CLK  ⚠️ ALSO RESERVED!
 
 Using these pins will BRICK your device! ⚠️
 ```
+
+**This is different from standard ESP32 modules** where only GPIO 6-11 are used for external flash.
 
 ---
 
@@ -51,7 +55,7 @@ Using these pins will BRICK your device! ⚠️
 
 ---
 
-### GPIO 15 - ⚠️ STRAPPING PIN (Use with Caution)
+### GPIO 15 - ⚠️ STRAPPING PIN (Best Available Option for CS)
 
 **Function:** Boot mode selection
 **Default:** Internal pull-up
@@ -62,7 +66,9 @@ Using these pins will BRICK your device! ⚠️
 - If LOW at boot: Enters silent/quiet boot mode (can cause issues)
 - After boot: Can be used as GPIO
 
-**Safe to use for SPI CS:** ⚠️ Use with care (add external 10K pull-up)
+**Safe to use for SPI CS:** ✅ Yes, WITH external 10K pull-up resistor
+
+**This is now the BEST option for CS** since GPIO 16/17 are reserved for internal flash!
 
 ---
 
@@ -88,11 +94,12 @@ Pin   Function                 Status
 
 ---
 
-## ✅ Recommendation: GPIO 12-15 Can Be Used for External Flash
+## ✅ CORRECTED Recommendation: GPIO 12-15 for External Flash
 
 **Yes, GPIO 12, 13, 14, 15 are available on ESP32-PICO-KIT!**
+**⚠️ GPIO 16/17 are NOT available (used for internal flash)**
 
-**HSPI Configuration for W25Q64:**
+**CORRECT HSPI Configuration for W25Q64:**
 ```
 ESP32 GPIO          W25Q64 Flash
 ──────────────      ────────────
@@ -102,6 +109,8 @@ GPIO 13 (SCK)   →   CLK (Clock)
 GPIO 15 (CS)    →   CS (Chip Select)
 3.3V            →   VCC
 GND             →   GND
+
+REQUIRED: 10K pull-up resistor from GPIO 15 to 3.3V!
 ```
 
 ---
