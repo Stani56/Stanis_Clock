@@ -6,6 +6,31 @@
 **Timeline:** 2-3 weeks part-time (1-2 hours/day)
 **Philosophy:** Small steps, test everything, commit frequently
 
+**⚠️ NOTE:** This is the **basic implementation plan** using only internal flash storage (1.4 MB available).
+
+**For extended storage with W25Q64 (8MB external flash)**, see:
+**→ [chime-system-implementation-plan-w25q64.md](chime-system-implementation-plan-w25q64.md)**
+
+---
+
+## Storage Comparison
+
+| Feature | Basic Plan (This Document) | W25Q64 Plan |
+|---------|---------------------------|-------------|
+| **Storage** | Internal flash only | Internal + 8MB external flash |
+| **Audio Capacity** | ~1.4 MB | ~8 MB |
+| **Westminster Chimes** | ✅ Full set (608 KB) | ✅ Full set (608 KB) |
+| **Multiple Styles** | ❌ Limited | ✅ Church bells, custom |
+| **Voice Announcements** | ❌ No room | ✅ 4 MB (EN + DE) |
+| **Music/Melodies** | ❌ No room | ✅ 1 MB |
+| **User Upload** | ❌ Requires reflash | ✅ MQTT upload |
+| **Cost** | $9 | $17 (+$8) |
+| **Timeline** | 11-18 days | 16-24 days (+5-6 days) |
+| **Future-proof** | Limited | Excellent |
+
+**Choose this plan if:** You only want basic Westminster chimes
+**Choose W25Q64 plan if:** You want expansion capability and user-uploadable sounds
+
 ---
 
 ## Phase 0: Preparation & Hardware Setup

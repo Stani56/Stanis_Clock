@@ -15,11 +15,13 @@ GPIO 25/26 → I2C LEDs (10× TLC59116 controllers @ 0x60-0x6A)
 GPIO 34    → Potentiometer (brightness control)
 GPIO 21/22 → Status LEDs (WiFi/NTP indicators)
 GPIO 5     → Reset button (WiFi credentials clear)
+GPIO 12/13/14/15 → SPI External Flash (W25Q64, 8MB for chime audio - optional)
 ```
 
 **LED Matrix:** 10 rows × 16 columns (160 LEDs)
 **I2C Speed:** 100kHz (conservative for reliability)
 **Flash:** 4MB minimum, 2.5MB app partition (see `partitions.csv`)
+**External Flash:** W25Q64 8MB SPI (optional, for chime system expansion)
 
 ### Quick Start
 ```bash
@@ -36,14 +38,15 @@ idf.py build flash monitor
 
 ## System Architecture
 
-### Component Structure (21 Components)
+### Component Structure (22 Components)
 ```
 Hardware Layer:
 ├── i2c_devices        - TLC59116 LED controllers + DS3231 RTC
 ├── adc_manager        - Potentiometer input
 ├── light_sensor       - BH1750 ambient light
 ├── button_manager     - Reset button handling
-└── status_led_manager - Network status indicators
+├── status_led_manager - Network status indicators
+└── external_flash     - W25Q64 8MB SPI flash driver (optional, for chime audio)
 
 Display Layer:
 ├── wordclock_display  - German word logic + LED matrix
@@ -319,6 +322,24 @@ hour_words[]           // "EINS" (e.g., "FÜNF VOR EINS")
 - **Fallback guarantee:** Instant mode if transitions fail
 - **Priority:** Hour words > Minute words > Indicators
 
+### External Flash Driver (Oct 2025)
+**W25Q64 8MB SPI Flash for Chime Audio Expansion**
+- **GPIO Pins:** 12 (MISO), 13 (SCK), 14 (MOSI), 15 (CS)
+- **SPI Bus:** HSPI (SPI2_HOST) at 10 MHz
+- **JEDEC ID Verification:** 0xEF 0x40 0x17 (Winbond W25Q64)
+- **Operations:** Read, write (page programming), erase (sector/range)
+- **Test Suite:** 9 comprehensive tests + quick smoke test
+- **Address Map:** See [chime_map.h](components/chime_library/include/chime_map.h)
+  - Westminster chimes: 0x000000-0x060000 (608 KB)
+  - Alternative styles: 0x100000-0x200000 (1 MB)
+  - Voice announcements: 0x200000-0x600000 (4 MB)
+  - Music library: 0x600000-0x700000 (1 MB)
+  - Test area: 0x700000-0x703000 (12 KB)
+- **Documentation:**
+  - [external-flash-quick-start.md](docs/technical/external-flash-quick-start.md) - Quick testing guide
+  - [external-flash-testing.md](docs/technical/external-flash-testing.md) - Comprehensive test guide
+  - [chime-system-implementation-plan-w25q64.md](docs/implementation/chime-system-implementation-plan-w25q64.md) - Full implementation plan
+
 ## Troubleshooting
 
 ### Success Indicators
@@ -353,10 +374,11 @@ hour_words[]           // "EINS" (e.g., "FÜNF VOR EINS")
 ### Initialization Sequence
 1. **Hardware:** I2C buses → TLC59116 controllers → DS3231 RTC
 2. **Sensors:** ADC (potentiometer) → BH1750 (light sensor)
-3. **Display:** LED state initialization → brightness config
-4. **Network:** NVS → WiFi (STA or AP) → NTP → MQTT
-5. **IoT:** MQTT Discovery → Home Assistant integration
-6. **Tasks:** Status LED task → Light sensor task (10Hz)
+3. **External Storage (Optional):** SPI bus → W25Q64 flash → JEDEC ID verification
+4. **Display:** LED state initialization → brightness config
+5. **Network:** NVS → WiFi (STA or AP) → NTP → MQTT
+6. **IoT:** MQTT Discovery → Home Assistant integration
+7. **Tasks:** Status LED task → Light sensor task (10Hz)
 
 ### Data Flow
 ```
