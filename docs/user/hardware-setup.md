@@ -23,6 +23,12 @@ Complete guide for assembling and connecting your ESP32 German Word Clock hardwa
 - **Breadboard/PCB**: For connections
 - **Jumper Wires**: For GPIO connections
 
+### Optional: Chime System Expansion
+- **W25Q64 8MB SPI Flash Module** (for audio storage)
+  - Enables Westminster chime sounds
+  - Supports voice announcements and custom audio
+  - Connects via SPI interface (HSPI)
+
 ## 🔧 GPIO Pin Assignments
 
 ```
@@ -32,6 +38,11 @@ ESP32 GPIO Connections:
 │   ├── GPIO 19 → I2C SCL (Sensors Bus)    → DS3231, BH1750
 │   ├── GPIO 25 → I2C SDA (LEDs Bus)       → TLC59116 controllers
 │   └── GPIO 26 → I2C SCL (LEDs Bus)       → TLC59116 controllers
+├── SPI Bus (Optional - for W25Q64 external flash)
+│   ├── GPIO 12 → SPI MISO                 → W25Q64 DO/SO
+│   ├── GPIO 13 → SPI SCK                  → W25Q64 CLK/SCK
+│   ├── GPIO 14 → SPI MOSI                 → W25Q64 DI/SI
+│   └── GPIO 15 → SPI CS                   → W25Q64 /CS (chip select)
 ├── Analog Input
 │   └── GPIO 34 → ADC Input                → Potentiometer (brightness)
 ├── Digital Outputs
@@ -40,6 +51,8 @@ ESP32 GPIO Connections:
 └── Digital Input
     └── GPIO 5  → Reset Button (with pull-up)
 ```
+
+**Note on GPIO 15:** Has internal pull-up resistor - no external pull-up needed for SPI CS.
 
 ## 🔗 I2C Device Addresses
 
@@ -153,6 +166,29 @@ Row 2 (0x62): ADDR1=L, ADDR2=H, ADDR3=L, ADDR4=L
 ... (see I2C Device Addresses section for complete list)
 ```
 
+### Step 5: External Flash (Optional - for Chime System)
+```bash
+# W25Q64 8MB SPI Flash Module
+ESP32 GPIO 14 → W25Q64 DI/SI (MOSI)
+ESP32 GPIO 12 → W25Q64 DO/SO (MISO)
+ESP32 GPIO 13 → W25Q64 CLK/SCK
+ESP32 GPIO 15 → W25Q64 /CS (Chip Select)
+3.3V → W25Q64 VCC
+GND → W25Q64 GND
+
+# Optional but recommended:
+# - 100nF (0.1µF) capacitor between VCC and GND (close to chip)
+```
+
+**Testing External Flash:**
+After wiring, test with firmware commands:
+```c
+external_flash_init();           // Initialize and verify JEDEC ID
+external_flash_quick_test();     // Quick hardware verification
+```
+
+See [external-flash-quick-start.md](../technical/external-flash-quick-start.md) for detailed testing guide.
+
 ## 🧪 Hardware Testing
 
 ### Basic Connectivity Test
@@ -166,9 +202,12 @@ Row 2 (0x62): ADDR1=L, ADDR2=H, ADDR3=L, ADDR4=L
 LEDs Bus (Port 0): 10 devices found
 - TLC59116 Controllers: 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x69, 0x6A
 
-Sensors Bus (Port 1): 2 devices found  
+Sensors Bus (Port 1): 2 devices found
 - DS3231 RTC: 0x68
 - BH1750 Light Sensor: 0x23
+
+External Flash (Optional):
+- W25Q64 SPI Flash: JEDEC ID 0xEF 0x40 0x17 (Winbond 8MB)
 ```
 
 ## ⚠️ Safety and Troubleshooting
@@ -186,6 +225,8 @@ Sensors Bus (Port 1): 2 devices found
 | LEDs not lighting | Address conflict | Verify TLC59116 address pins |
 | Erratic behavior | Power supply noise | Add filtering capacitors |
 | I2C timeouts | Bus speed too high | Firmware uses 100kHz (conservative) |
+| External flash not detected | SPI wiring | Check GPIO 12/13/14/15 connections |
+| Wrong JEDEC ID | Incorrect chip | Verify W25Q64 chip marking |
 
 ### Troubleshooting Tools
 - **Multimeter**: Verify voltage levels and continuity
