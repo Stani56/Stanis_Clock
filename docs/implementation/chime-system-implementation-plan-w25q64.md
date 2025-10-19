@@ -14,15 +14,23 @@
 - Hybrid storage: Critical chimes in internal flash (fallback), full library in external flash
 - Supports future expansion: Multiple chime styles, voice announcements, music
 
+**📖 Related Documentation:**
+- **[MAX98357A Integration Proposal](max98357a-integration-proposal.md)** - Detailed 819-line technical specification for I2S amplifier integration (based on datasheet analysis)
+- **[External Flash Quick Start](../technical/external-flash-quick-start.md)** - W25Q64 testing guide
+- **[Chime Map Header](../../components/chime_library/include/chime_map.h)** - 8MB flash address layout
+
 ---
 
 ## Updated Shopping List
 
 ### Audio Hardware
-- [ ] MAX98357A I2S Amplifier Module (~$5)
+- [ ] MAX98357A I2S Amplifier Module (~$5-8)
   - Adafruit: https://www.adafruit.com/product/3006
+  - DFRobot: DFR0954
   - Amazon: Search "MAX98357A I2S"
-- [ ] 8Ω 3W Speaker (~$3)
+- [ ] Speaker: **4Ω 3W** recommended (or 8Ω 2-3W) (~$2-5)
+  - 4Ω provides louder output (3.2W @ 5V)
+  - 8Ω provides quieter output (1.8W @ 5V)
   - Diameter: 40-57mm (fits in enclosure)
   - Wire length: 15cm minimum
 - [ ] Jumper wires (3×) - female-to-female (~$1)
@@ -43,12 +51,14 @@
 
 ### I2S Audio (MAX98357A)
 ```
-GPIO 32: I2S BCLK (Bit Clock)
-GPIO 33: I2S LRCLK (LR Clock)
-GPIO 27: I2S DIN (Data)
-3.3V/5V: VIN
+GPIO 32: I2S DOUT (Data Output from ESP32) → MAX98357A DIN
+GPIO 33: I2S BCLK (Bit Clock)              → MAX98357A BCLK
+GPIO 27: I2S LRCLK (Word Select/LR Clock)  → MAX98357A LRC
+3.3V/5V: VIN (5V recommended for 3.2W output, 3.3V works at lower power)
 GND: GND
 ```
+
+**Note:** See [max98357a-integration-proposal.md](max98357a-integration-proposal.md) for complete specifications.
 
 ### HSPI External Flash (W25Q64) - NEW!
 ```
@@ -175,13 +185,13 @@ Used Pins:
 └─ GPIO 5: Reset button
 
 NEW Assignments:
-├─ GPIO 32: I2S BCLK     ✅ Available
-├─ GPIO 33: I2S LRCLK    ✅ Available
-├─ GPIO 27: I2S DIN      ✅ Available
-├─ GPIO 14: HSPI MOSI    ✅ Available
-├─ GPIO 12: HSPI MISO    ✅ Available
-├─ GPIO 13: HSPI SCK     ✅ Available
-└─ GPIO 15: HSPI CS      ✅ Available (internal pull-up)
+├─ GPIO 32: I2S DOUT     ✅ Available (ESP32 data to MAX98357A DIN)
+├─ GPIO 33: I2S BCLK     ✅ Available (Bit Clock)
+├─ GPIO 27: I2S LRCLK    ✅ Available (Word Select/LR Clock)
+├─ GPIO 14: HSPI MOSI    ✅ Available (to W25Q64 DI/SI)
+├─ GPIO 12: HSPI MISO    ✅ Available (from W25Q64 DO/SO)
+├─ GPIO 13: HSPI SCK     ✅ Available (Clock)
+└─ GPIO 15: HSPI CS      ✅ Available (Chip Select, internal pull-up)
 
 Reserved (DO NOT USE):
 ├─ GPIO 6-11: Internal flash ❌
