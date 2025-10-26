@@ -4,9 +4,9 @@
  *
  * Driver for Winbond W25Q64 8MB SPI flash memory chip.
  * Uses HSPI bus (SPI2_HOST) with the following GPIO pins:
- * - GPIO 14: MOSI (Master Out, Slave In)
+ * - GPIO 13: MOSI (Master Out, Slave In)
  * - GPIO 12: MISO (Master In, Slave Out)
- * - GPIO 13: SCK  (Serial Clock)
+ * - GPIO 14: SCK  (Serial Clock)
  * - GPIO 15: CS   (Chip Select - has internal pull-up)
  *
  * Features:
@@ -24,6 +24,7 @@
 #define EXTERNAL_FLASH_H
 
 #include "esp_err.h"
+#include "esp_partition.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -251,6 +252,23 @@ void external_flash_get_stats(uint32_t *total_reads,
  * @brief Reset flash statistics counters
  */
 void external_flash_reset_stats(void);
+
+/**
+ * @brief Register external flash as ESP partition for filesystem use
+ *
+ * Creates a virtual partition that allows LittleFS or other filesystems
+ * to use the external W25Q64 flash chip.
+ *
+ * @param[out] out_partition Pointer to receive the registered partition handle
+ *
+ * @return
+ *      - ESP_OK: Success, partition registered
+ *      - ESP_ERR_INVALID_STATE: Flash not initialized
+ *      - ESP_ERR_INVALID_ARG: NULL pointer
+ *      - ESP_ERR_NO_MEM: Failed to allocate partition
+ *      - ESP_FAIL: Failed to register partition
+ */
+esp_err_t external_flash_register_partition(const esp_partition_t **out_partition);
 
 
 // ========================================================================

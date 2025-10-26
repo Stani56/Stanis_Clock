@@ -28,6 +28,8 @@
 #include "light_sensor.h"
 #include "button_manager.h"
 #include "status_led_manager.h"
+#include "external_flash.h"
+#include "filesystem_manager.h"
 
 // Refactored modules
 #include "wordclock_display.h"
@@ -89,7 +91,24 @@ static esp_err_t initialize_hardware(void)
     // Scan I2C buses for diagnostics
     i2c_scan_bus(I2C_LEDS_MASTER_PORT);
     i2c_scan_bus(I2C_SENSORS_MASTER_PORT);
-    
+
+    // Initialize external flash (optional - for chime system expansion)
+    ESP_LOGI(TAG, "Initializing external flash (W25Q64)...");
+    ret = external_flash_init();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "External flash init failed - continuing without chime storage");
+        ESP_LOGW(TAG, "This is normal if W25Q64 flash chip is not installed");
+    } else {
+        // Initialize filesystem manager (LittleFS on external flash)
+        ESP_LOGI(TAG, "Initializing filesystem manager (LittleFS)...");
+        ret = filesystem_manager_init();
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "Filesystem manager init failed - continuing without file storage");
+        } else {
+            ESP_LOGI(TAG, "✅ Filesystem ready at /storage");
+        }
+    }
+
     // Initialize display system and clear all LEDs
     ret = wordclock_display_init();
     if (ret != ESP_OK) {

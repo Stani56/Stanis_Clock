@@ -13,6 +13,10 @@
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_partition.h"
+#include "esp_flash.h"
+#include "esp_flash_spi_init.h"
+#include "spi_flash_mmap.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <string.h>
@@ -51,8 +55,8 @@ static const char *TAG = "external_flash";
 // ========================================================================
 
 #define PIN_NUM_MISO            12      /**< SPI MISO (Master In, Slave Out) */
-#define PIN_NUM_MOSI            14      /**< SPI MOSI (Master Out, Slave In) */
-#define PIN_NUM_CLK             13      /**< SPI Clock */
+#define PIN_NUM_MOSI            13      /**< SPI MOSI (Master Out, Slave In) */
+#define PIN_NUM_CLK             14      /**< SPI Clock */
 #define PIN_NUM_CS              15      /**< SPI Chip Select (has internal pull-up) */
 
 // ========================================================================
@@ -67,6 +71,7 @@ static const char *TAG = "external_flash";
 // ========================================================================
 
 static spi_device_handle_t spi_handle = NULL;      /**< SPI device handle */
+static esp_flash_t *esp_flash_handle = NULL;        /**< ESP-IDF flash handle for partition API */
 static bool initialized = false;                    /**< Initialization flag */
 
 // Statistics tracking
@@ -551,6 +556,103 @@ void external_flash_reset_stats(void)
     stats_writes = 0;
     stats_erases = 0;
     ESP_LOGI(TAG, "Statistics reset");
+}
+
+/**
+ * @brief Register external flash as ESP partition for filesystem use
+ *
+ * This function registers the W25Q64 external flash with ESP-IDF's esp_flash API,
+ * then creates a partition on it that can be used by LittleFS or other filesystems.
+ *
+ * The function uses spi_bus_add_flash_device() to add the flash to the existing
+ * SPI bus (SPI2/HSPI), then registers it as a partition.
+ */
+esp_err_t external_flash_register_partition(const esp_partition_t **out_partition)
+{
+    if (!initialized) {
+        ESP_LOGE(TAG, "Flash not initialized - call external_flash_init() first");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (out_partition == NULL) {
+        ESP_LOGE(TAG, "Output partition pointer is NULL");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Check if already registered
+    static const esp_partition_t *s_registered_partition = NULL;
+    if (s_registered_partition != NULL) {
+        ESP_LOGI(TAG, "Partition already registered, returning existing handle");
+        *out_partition = s_registered_partition;
+        return ESP_OK;
+    }
+
+    ESP_LOGI(TAG, "Registering external flash with ESP-IDF esp_flash API...");
+
+    // Step 1: Configure esp_flash device on the existing SPI bus
+    // Note: The SPI bus (SPI2/HSPI) is already initialized by external_flash_init()
+    const esp_flash_spi_device_config_t flash_config = {
+        .host_id = SPI2_HOST,
+        .cs_id = 0,  // First CS on this SPI host
+        .cs_io_num = PIN_NUM_CS,
+        .io_mode = SPI_FLASH_DIO,  // Dual I/O mode
+        .freq_mhz = 10,  // 10 MHz to match our custom driver
+    };
+
+    // Step 2: Add flash device to SPI bus and get esp_flash handle
+    ESP_LOGI(TAG, "Adding flash device to SPI bus...");
+    esp_err_t ret = spi_bus_add_flash_device(&esp_flash_handle, &flash_config);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to add flash device: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    // Step 3: Initialize the flash chip (probe and detect)
+    ESP_LOGI(TAG, "Initializing esp_flash chip...");
+    ret = esp_flash_init(esp_flash_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize esp_flash: %s", esp_err_to_name(ret));
+        spi_bus_remove_flash_device(esp_flash_handle);
+        esp_flash_handle = NULL;
+        return ret;
+    }
+
+    // Step 4: Verify flash size
+    uint32_t flash_size = 0;
+    ret = esp_flash_get_size(esp_flash_handle, &flash_size);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get flash size: %s", esp_err_to_name(ret));
+    } else {
+        ESP_LOGI(TAG, "External flash size: %lu bytes (%.2f MB)",
+                 (unsigned long)flash_size, flash_size / (1024.0 * 1024.0));
+    }
+
+    // Step 5: Register the entire flash as a partition
+    ESP_LOGI(TAG, "Registering partition 'ext_storage'...");
+    ret = esp_partition_register_external(
+        esp_flash_handle,
+        0,                                      // Start at offset 0
+        EXTERNAL_FLASH_SIZE,                    // Use entire 8MB
+        "ext_storage",                          // Partition label
+        ESP_PARTITION_TYPE_DATA,                // Data partition
+        ESP_PARTITION_SUBTYPE_DATA_SPIFFS,      // Generic data subtype
+        &s_registered_partition
+    );
+
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register partition: %s", esp_err_to_name(ret));
+        spi_bus_remove_flash_device(esp_flash_handle);
+        esp_flash_handle = NULL;
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "✅ External flash registered as partition 'ext_storage'");
+    ESP_LOGI(TAG, "   Size: 8 MB");
+    ESP_LOGI(TAG, "   Type: DATA");
+    ESP_LOGI(TAG, "   Ready for LittleFS mount");
+
+    *out_partition = s_registered_partition;
+    return ESP_OK;
 }
 
 // ========================================================================
