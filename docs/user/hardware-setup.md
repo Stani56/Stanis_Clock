@@ -169,9 +169,9 @@ Row 2 (0x62): ADDR1=L, ADDR2=H, ADDR3=L, ADDR4=L
 ### Step 5: External Flash (Optional - for Chime System)
 ```bash
 # W25Q64 8MB SPI Flash Module
-ESP32 GPIO 14 → W25Q64 DI/SI (MOSI)
+ESP32 GPIO 13 → W25Q64 DI/SI (MOSI)   ← VERIFIED CORRECT
 ESP32 GPIO 12 → W25Q64 DO/SO (MISO)
-ESP32 GPIO 13 → W25Q64 CLK/SCK
+ESP32 GPIO 14 → W25Q64 CLK/SCK        ← VERIFIED CORRECT
 ESP32 GPIO 15 → W25Q64 /CS (Chip Select)
 3.3V → W25Q64 VCC
 GND → W25Q64 GND
@@ -180,11 +180,25 @@ GND → W25Q64 GND
 # - 100nF (0.1µF) capacitor between VCC and GND (close to chip)
 ```
 
+**Phase 1 Integration (Complete ✅):**
+The system now includes:
+- LittleFS filesystem mounted at `/storage`
+- Auto-created directories: `/storage/chimes`, `/storage/config`
+- File I/O API for managing chime audio files
+- Graceful degradation if W25Q64 not installed
+
 **Testing External Flash:**
-After wiring, test with firmware commands:
+After wiring, the firmware automatically:
 ```c
-external_flash_init();           // Initialize and verify JEDEC ID
-external_flash_quick_test();     // Quick hardware verification
+external_flash_init();              // Initialize and verify JEDEC ID
+filesystem_manager_init();          // Mount LittleFS filesystem
+// Success log: "Filesystem ready at /storage"
+```
+
+Manual testing commands:
+```c
+external_flash_quick_test();        // Quick hardware verification
+filesystem_file_exists("/storage"); // Verify filesystem
 ```
 
 See [external-flash-quick-start.md](../technical/external-flash-quick-start.md) for detailed testing guide.

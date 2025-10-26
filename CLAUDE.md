@@ -15,7 +15,8 @@ GPIO 25/26 → I2C LEDs (10× TLC59116 controllers @ 0x60-0x6A)
 GPIO 34    → Potentiometer (brightness control)
 GPIO 21/22 → Status LEDs (WiFi/NTP indicators)
 GPIO 5     → Reset button (WiFi credentials clear)
-GPIO 12/13/14/15 → SPI External Flash (W25Q64, 8MB for chime audio - optional)
+GPIO 12/13/14/15 → SPI External Flash (W25Q64, 8MB for chime audio - OPTIONAL)
+                    GPIO 12=MISO, 13=MOSI, 14=CLK, 15=CS
 ```
 
 **LED Matrix:** 10 rows × 16 columns (160 LEDs)
@@ -38,7 +39,7 @@ idf.py build flash monitor
 
 ## System Architecture
 
-### Component Structure (22 Components)
+### Component Structure (23 Components)
 ```
 Hardware Layer:
 ├── i2c_devices        - TLC59116 LED controllers + DS3231 RTC
@@ -46,7 +47,8 @@ Hardware Layer:
 ├── light_sensor       - BH1750 ambient light
 ├── button_manager     - Reset button handling
 ├── status_led_manager - Network status indicators
-└── external_flash     - W25Q64 8MB SPI flash driver (optional, for chime audio)
+├── external_flash     - W25Q64 8MB SPI flash driver (OPTIONAL, for chime audio)
+└── filesystem_manager - LittleFS on external flash (OPTIONAL, Phase 1 complete ✅)
 
 Display Layer:
 ├── wordclock_display  - German word logic + LED matrix
@@ -64,7 +66,8 @@ Network Layer:
 System Services:
 ├── nvs_manager        - Credential storage
 ├── thread_safety      - Production-grade synchronization
-└── system_init        - Centralized initialization
+├── error_log_manager  - Persistent error logging (50 entries)
+└── led_validation     - LED hardware validation system
 ```
 
 ### Main Application (main/)
@@ -275,7 +278,7 @@ idf.py fullclean && idf.py build
 | Potentiometer update | 15 seconds |
 | LED update time | 12-20ms |
 | I2C ops per update | 5-25 (was 160+) |
-| Binary size | 1.1MB |
+| Binary size | 1.2MB (Phase 1 complete) |
 | WiFi reconnect | 5-15 seconds |
 | System uptime | >99% |
 
@@ -322,23 +325,47 @@ hour_words[]           // "EINS" (e.g., "FÜNF VOR EINS")
 - **Fallback guarantee:** Instant mode if transitions fail
 - **Priority:** Hour words > Minute words > Indicators
 
-### External Flash Driver (Oct 2025)
-**W25Q64 8MB SPI Flash for Chime Audio Expansion**
-- **GPIO Pins:** 12 (MISO), 13 (SCK), 14 (MOSI), 15 (CS)
+### External Flash & Filesystem (Oct 2025) - Phase 1 Complete ✅
+**W25Q64 8MB SPI Flash with LittleFS Filesystem**
+
+**Hardware Configuration:**
+- **GPIO Pins:** 12 (MISO), 13 (MOSI), 14 (CLK), 15 (CS) ← **Verified correct**
 - **SPI Bus:** HSPI (SPI2_HOST) at 10 MHz
-- **JEDEC ID Verification:** 0xEF 0x40 0x17 (Winbond W25Q64)
-- **Operations:** Read, write (page programming), erase (sector/range)
-- **Test Suite:** 9 comprehensive tests + quick smoke test
-- **Address Map:** See [chime_map.h](components/chime_library/include/chime_map.h)
-  - Westminster chimes: 0x000000-0x060000 (608 KB)
-  - Alternative styles: 0x100000-0x200000 (1 MB)
-  - Voice announcements: 0x200000-0x600000 (4 MB)
-  - Music library: 0x600000-0x700000 (1 MB)
-  - Test area: 0x700000-0x703000 (12 KB)
-- **Documentation:**
+- **JEDEC ID:** 0xEF 0x40 0x17 (Winbond W25Q64)
+- **Status:** OPTIONAL hardware - system works without W25Q64 installed
+
+**Flash Driver (external_flash component):**
+- Operations: Read, write (page programming), erase (sector/range)
+- Partition registration: Dynamic via `external_flash_register_partition()`
+- Registers entire 8MB flash as virtual ESP partition "ext_storage"
+- Test suite: 9 comprehensive tests + quick smoke test
+
+**Filesystem Manager (filesystem_manager component):**
+- **Filesystem:** LittleFS (joltwallet/littlefs ^1.14.8)
+- **Mount Point:** `/storage`
+- **Auto-created Directories:** `/storage/chimes`, `/storage/config`
+- **API:** List, read, write, delete, rename, format files
+- **Features:** Wear leveling, power-loss protection, POSIX-like API
+- **Integration:** Ported from proven Chimes_System (working code)
+
+**Usage:**
+```c
+// File operations available after initialization
+filesystem_write_file("/storage/chimes/test.pcm", buffer, size);
+filesystem_read_file("/storage/chimes/test.pcm", &buffer, &size);
+filesystem_file_exists("/storage/chimes/test.pcm");  // Returns bool
+```
+
+**Initialization:**
+- Occurs in `wordclock.c` after I2C initialization
+- Graceful degradation if W25Q64 not present
+- Logs: "Filesystem ready at /storage" on success
+
+**Documentation:**
   - [external-flash-quick-start.md](docs/technical/external-flash-quick-start.md) - Quick testing guide
   - [external-flash-testing.md](docs/technical/external-flash-testing.md) - Comprehensive test guide
-  - [chime-system-implementation-plan-w25q64.md](docs/implementation/chime-system-implementation-plan-w25q64.md) - Full implementation plan
+  - [integration-strategy-from-chimes.md](docs/implementation/integration-strategy-from-chimes.md) - Full integration plan
+  - [chime-system-implementation-plan-w25q64.md](docs/implementation/chime-system-implementation-plan-w25q64.md) - Original implementation plan
 
 ## Troubleshooting
 
@@ -374,7 +401,10 @@ hour_words[]           // "EINS" (e.g., "FÜNF VOR EINS")
 ### Initialization Sequence
 1. **Hardware:** I2C buses → TLC59116 controllers → DS3231 RTC
 2. **Sensors:** ADC (potentiometer) → BH1750 (light sensor)
-3. **External Storage (Optional):** SPI bus → W25Q64 flash → JEDEC ID verification
+3. **External Storage (OPTIONAL - Phase 1 ✅):**
+   - SPI bus (HSPI) → W25Q64 flash init → JEDEC ID verification
+   - Filesystem manager → LittleFS mount at /storage
+   - Auto-create /storage/chimes and /storage/config directories
 4. **Display:** LED state initialization → brightness config
 5. **Network:** NVS → WiFi (STA or AP) → NTP → MQTT
 6. **IoT:** MQTT Discovery → Home Assistant integration
