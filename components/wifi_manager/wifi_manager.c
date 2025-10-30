@@ -63,9 +63,9 @@ void wifi_manager_event_handler(void* arg, esp_event_base_t event_base, int32_t 
         thread_safe_set_wifi_connected(true);
         status_led_set_wifi_status(WIFI_STATUS_CONNECTED);
 
-        // Disable WiFi power save to prevent crashes during MQTT operations
-        ESP_LOGI(TAG, "Disabling WiFi power save mode to prevent crashes");
-        esp_wifi_set_ps(WIFI_PS_NONE);
+        // Set WiFi to minimum modem power save (more stable than fully disabled)
+        ESP_LOGI(TAG, "Setting WiFi power save to MIN_MODEM mode");
+        esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
 
         // Log the reconnection and NTP status
         ESP_LOGI(TAG, "WiFi connected successfully - NTP sync status: %s",
