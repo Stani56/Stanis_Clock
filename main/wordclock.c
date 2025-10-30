@@ -116,6 +116,15 @@ static esp_err_t initialize_hardware(void)
                 ESP_LOGW(TAG, "This is normal if MAX98357A amplifier is not installed");
             } else {
                 ESP_LOGI(TAG, "✅ Audio subsystem ready");
+
+                // Play startup test tone to verify audio hardware
+                ESP_LOGI(TAG, "🔊 Playing startup test tone...");
+                ret = audio_play_test_tone();
+                if (ret == ESP_OK) {
+                    ESP_LOGI(TAG, "✅ Startup test tone playing (440Hz for 2 seconds)");
+                } else {
+                    ESP_LOGW(TAG, "⚠️ Startup test tone failed: %s", esp_err_to_name(ret));
+                }
             }
         }
     }
