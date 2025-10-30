@@ -30,6 +30,7 @@
 #include "status_led_manager.h"
 #include "external_flash.h"
 #include "filesystem_manager.h"
+#include "audio_manager.h"
 
 // Refactored modules
 #include "wordclock_display.h"
@@ -106,6 +107,16 @@ static esp_err_t initialize_hardware(void)
             ESP_LOGW(TAG, "Filesystem manager init failed - continuing without file storage");
         } else {
             ESP_LOGI(TAG, "✅ Filesystem ready at /storage");
+
+            // Initialize audio manager (I2S for MAX98357A amplifier)
+            ESP_LOGI(TAG, "Initializing audio manager (I2S)...");
+            ret = audio_manager_init();
+            if (ret != ESP_OK) {
+                ESP_LOGW(TAG, "Audio manager init failed - continuing without audio");
+                ESP_LOGW(TAG, "This is normal if MAX98357A amplifier is not installed");
+            } else {
+                ESP_LOGI(TAG, "✅ Audio subsystem ready");
+            }
         }
     }
 
