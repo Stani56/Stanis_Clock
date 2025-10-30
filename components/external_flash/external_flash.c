@@ -126,7 +126,7 @@ esp_err_t external_flash_init(void)
         .mode = 0,                  // SPI mode 0 (CPOL=0, CPHA=0)
         .spics_io_num = PIN_NUM_CS,
         .queue_size = 7,            // Transaction queue size
-        .flags = 0,
+        .flags = SPI_DEVICE_HALFDUPLEX,  // Allow different TX/RX lengths
         .pre_cb = NULL,
         .post_cb = NULL
     };
