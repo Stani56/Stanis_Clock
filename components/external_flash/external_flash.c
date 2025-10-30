@@ -451,18 +451,20 @@ esp_err_t external_flash_read_jedec_id(uint8_t *manufacturer,
         return ESP_ERR_INVALID_STATE;
     }
 
-    uint8_t cmd = CMD_READ_JEDEC_ID;
     uint8_t id_data[3] = {0};
 
-    spi_transaction_t trans = {
-        .flags = 0,
-        .length = 8,        // 1 byte command
-        .rxlength = 24,     // 3 bytes response
-        .tx_buffer = &cmd,
-        .rx_buffer = id_data
+    // Use spi_transaction_ext_t with variable command for command-only transactions
+    spi_transaction_ext_t trans = {
+        .base = {
+            .flags = SPI_TRANS_VARIABLE_CMD,
+            .cmd = CMD_READ_JEDEC_ID,
+            .rxlength = 24,     // 3 bytes response
+            .rx_buffer = id_data
+        },
+        .command_bits = 8       // 8-bit command
     };
 
-    esp_err_t ret = spi_device_transmit(spi_handle, &trans);
+    esp_err_t ret = spi_device_transmit(spi_handle, (spi_transaction_t*)&trans);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to read JEDEC ID: %s", esp_err_to_name(ret));
         return ret;
