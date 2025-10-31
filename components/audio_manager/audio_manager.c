@@ -7,6 +7,7 @@
 #include "driver/i2s_std.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "external_flash.h"
@@ -192,11 +193,20 @@ esp_err_t audio_play_pcm(const int16_t *pcm_data, size_t sample_count)
     memcpy(scaled_data, pcm_data, sample_count * sizeof(int16_t));
     apply_volume(scaled_data, sample_count);
 
+    // CRITICAL: Enable WiFi modem sleep during I2S DMA to prevent hardware conflicts
+    ESP_LOGI(TAG, "Enabling WiFi modem sleep for audio playback");
+    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);  // Enable light modem sleep (reduces RX activity)
+    vTaskDelay(pdMS_TO_TICKS(10));  // Give WiFi time to enter sleep state
+
     // Write to I2S
     size_t bytes_written = 0;
     esp_err_t ret = i2s_channel_write(tx_handle, scaled_data,
                                       sample_count * sizeof(int16_t),
                                       &bytes_written, portMAX_DELAY);
+
+    // Restore WiFi to fully active (no power save) after audio completes
+    esp_wifi_set_ps(WIFI_PS_NONE);
+    ESP_LOGI(TAG, "WiFi modem sleep disabled, back to active mode");
 
     free(scaled_data);
 
