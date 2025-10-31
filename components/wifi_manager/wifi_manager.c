@@ -63,8 +63,8 @@ void wifi_manager_event_handler(void* arg, esp_event_base_t event_base, int32_t 
         thread_safe_set_wifi_connected(true);
         status_led_set_wifi_status(WIFI_STATUS_CONNECTED);
 
-        // Set WiFi to minimum modem power save (more stable than fully disabled)
-        ESP_LOGI(TAG, "Setting WiFi power save to MIN_MODEM mode");
+        // Set WiFi to minimum modem power save (DTIM sleep already disabled via listen_interval=0)
+        ESP_LOGI(TAG, "Setting WiFi power save to MIN_MODEM mode (DTIM sleep disabled)");
         esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
 
         // Log the reconnection and NTP status
@@ -152,6 +152,7 @@ void wifi_manager_init_sta(const char* ssid, const char* password) {
     strncpy((char*)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid) - 1);
     strncpy((char*)wifi_config.sta.password, password, sizeof(wifi_config.sta.password) - 1);
     wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+    wifi_config.sta.listen_interval = 0;  // Disable DTIM sleep (prevents WiFi sleep during I2S/audio)
     
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
