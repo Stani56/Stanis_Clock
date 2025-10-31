@@ -64,8 +64,8 @@ void wifi_manager_event_handler(void* arg, esp_event_base_t event_base, int32_t 
         status_led_set_wifi_status(WIFI_STATUS_CONNECTED);
 
         // Completely disable WiFi power save to prevent crashes during MQTT/audio operations
-        // Combined with listen_interval=0 for maximum stability
-        ESP_LOGI(TAG, "Disabling WiFi power save completely (PS_NONE + listen_interval=0)");
+        // Use PS_NONE with default listen_interval (3) for stability
+        ESP_LOGI(TAG, "Disabling WiFi power save completely (WIFI_PS_NONE)");
         esp_wifi_set_ps(WIFI_PS_NONE);
 
         // Log the reconnection and NTP status
@@ -153,7 +153,7 @@ void wifi_manager_init_sta(const char* ssid, const char* password) {
     strncpy((char*)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid) - 1);
     strncpy((char*)wifi_config.sta.password, password, sizeof(wifi_config.sta.password) - 1);
     wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
-    wifi_config.sta.listen_interval = 0;  // Disable DTIM sleep (prevents WiFi sleep during I2S/audio)
+    // Use default listen_interval (3) - listen_interval=0 causes router disconnects
     
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
