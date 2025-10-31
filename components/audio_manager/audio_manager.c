@@ -77,10 +77,11 @@ esp_err_t audio_manager_init(void)
         ESP_LOGI(TAG, "Amplifier SD pin hardwired to VIN (always on)");
     }
 
-    // Configure I2S channel
+    // Configure I2S channel with WiFi-safe settings
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
     chan_cfg.dma_desc_num = AUDIO_DMA_BUF_COUNT;
     chan_cfg.dma_frame_num = AUDIO_DMA_BUF_LEN;
+    chan_cfg.auto_clear = true;  // Auto-clear DMA buffers (prevents data carryover)
 
     esp_err_t ret = i2s_new_channel(&chan_cfg, &tx_handle, NULL);
     if (ret != ESP_OK) {

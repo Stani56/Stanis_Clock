@@ -28,11 +28,11 @@ extern "C" {
 /**
  * @brief Audio Configuration
  */
-#define AUDIO_SAMPLE_RATE       16000  // 16 kHz
+#define AUDIO_SAMPLE_RATE       8000   // 8 kHz (reduced for WiFi compatibility)
 #define AUDIO_BITS_PER_SAMPLE   16     // 16-bit
 #define AUDIO_CHANNELS          1      // Mono
 #define AUDIO_DMA_BUF_COUNT     8      // Number of DMA buffers
-#define AUDIO_DMA_BUF_LEN       256    // Samples per DMA buffer
+#define AUDIO_DMA_BUF_LEN       128    // Samples per DMA buffer (reduced for WiFi)
 
 /**
  * @brief GPIO Pin Definitions for I2S
