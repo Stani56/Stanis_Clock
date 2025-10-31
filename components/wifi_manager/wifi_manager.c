@@ -63,10 +63,8 @@ void wifi_manager_event_handler(void* arg, esp_event_base_t event_base, int32_t 
         thread_safe_set_wifi_connected(true);
         status_led_set_wifi_status(WIFI_STATUS_CONNECTED);
 
-        // Completely disable WiFi power save to prevent crashes during MQTT/audio operations
-        // Use PS_NONE with default listen_interval (3) for stability
-        ESP_LOGI(TAG, "Disabling WiFi power save completely (WIFI_PS_NONE)");
-        esp_wifi_set_ps(WIFI_PS_NONE);
+        // Use default WiFi power save (no explicit setting like Chimes_System)
+        // Default is WIFI_PS_MAX_MODEM which works with I2S audio
 
         // Log the reconnection and NTP status
         ESP_LOGI(TAG, "WiFi connected successfully - NTP sync status: %s",
