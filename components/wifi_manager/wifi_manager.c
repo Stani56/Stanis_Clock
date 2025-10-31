@@ -63,9 +63,10 @@ void wifi_manager_event_handler(void* arg, esp_event_base_t event_base, int32_t 
         thread_safe_set_wifi_connected(true);
         status_led_set_wifi_status(WIFI_STATUS_CONNECTED);
 
-        // Set WiFi to minimum modem power save (DTIM sleep already disabled via listen_interval=0)
-        ESP_LOGI(TAG, "Setting WiFi power save to MIN_MODEM mode (DTIM sleep disabled)");
-        esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+        // Completely disable WiFi power save to prevent crashes during MQTT/audio operations
+        // Combined with listen_interval=0 for maximum stability
+        ESP_LOGI(TAG, "Disabling WiFi power save completely (PS_NONE + listen_interval=0)");
+        esp_wifi_set_ps(WIFI_PS_NONE);
 
         // Log the reconnection and NTP status
         ESP_LOGI(TAG, "WiFi connected successfully - NTP sync status: %s",
