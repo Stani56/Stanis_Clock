@@ -12,6 +12,7 @@
 #include "external_flash.h"
 #include <string.h>
 #include <math.h>
+#include <inttypes.h>
 
 static const char *TAG = "audio_mgr";
 
@@ -413,31 +414,41 @@ esp_err_t audio_play_test_tone(void)
 
     ESP_LOGI(TAG, "Generating 440Hz test tone (2 seconds)...");
 
-    // Generate 2 seconds of 440Hz sine wave
+    // Generate and play tone in chunks to save memory
     const uint32_t duration_sec = 2;
-    const uint32_t tone_samples = AUDIO_SAMPLE_RATE * duration_sec;
     const float frequency = 440.0f;  // Musical note A4
     const float amplitude = 0.5f;    // 50% amplitude to avoid clipping
+    const uint32_t chunk_samples = 1024;  // 1024 samples = 64ms chunks at 16kHz
+    const uint32_t total_samples = AUDIO_SAMPLE_RATE * duration_sec;
+    const uint32_t num_chunks = (total_samples + chunk_samples - 1) / chunk_samples;
 
-    int16_t *tone_buffer = malloc(tone_samples * sizeof(int16_t));
-    if (tone_buffer == NULL) {
+    int16_t *chunk_buffer = malloc(chunk_samples * sizeof(int16_t));
+    if (chunk_buffer == NULL) {
         ESP_LOGE(TAG, "Failed to allocate tone buffer");
         return ESP_ERR_NO_MEM;
     }
 
-    // Generate sine wave
-    for (uint32_t i = 0; i < tone_samples; i++) {
-        float t = (float)i / AUDIO_SAMPLE_RATE;
-        float sample = amplitude * sinf(2.0f * M_PI * frequency * t);
-        tone_buffer[i] = (int16_t)(sample * 32767.0f);
+    ESP_LOGI(TAG, "Playing 440Hz tone in %" PRIu32 " chunks...", num_chunks);
+
+    // Generate and play each chunk
+    esp_err_t ret = ESP_OK;
+    for (uint32_t chunk = 0; chunk < num_chunks && ret == ESP_OK; chunk++) {
+        uint32_t offset = chunk * chunk_samples;
+        uint32_t samples_in_chunk = (offset + chunk_samples <= total_samples) ?
+                                     chunk_samples : (total_samples - offset);
+
+        // Generate sine wave for this chunk
+        for (uint32_t i = 0; i < samples_in_chunk; i++) {
+            float t = (float)(offset + i) / AUDIO_SAMPLE_RATE;
+            float sample = amplitude * sinf(2.0f * M_PI * frequency * t);
+            chunk_buffer[i] = (int16_t)(sample * 32767.0f);
+        }
+
+        // Play this chunk
+        ret = audio_play_pcm(chunk_buffer, samples_in_chunk);
     }
 
-    ESP_LOGI(TAG, "Playing 440Hz tone...");
-
-    // Play the tone
-    esp_err_t ret = audio_play_pcm(tone_buffer, tone_samples);
-
-    free(tone_buffer);
+    free(chunk_buffer);
 
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "✅ Test tone playback started");
