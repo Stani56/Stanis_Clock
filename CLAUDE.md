@@ -156,7 +156,7 @@ Very Bright: 500-1500 lux → 200-255 brightness
 - TLC59116 auto-increment pointer corruption resolved
 - Register address masking with 0x1F disables auto-increment (bits 7:6 = 00)
 - Each PWM register read independently with explicit address
-- See [docs/implementation/tlc59116-validation-fix.md](docs/implementation/tlc59116-validation-fix.md) for detailed analysis
+- See [docs/implementation/led-validation/tlc59116-validation-fix.md](docs/implementation/led-validation/tlc59116-validation-fix.md) for detailed analysis
 
 **EFLAG Error Detection (Intentionally Disabled):**
 - TLC59116 MODE2 register bit 0 (EFAIL) is set to 0 (disabled)
@@ -164,7 +164,7 @@ Very Bright: 500-1500 lux → 200-255 brightness
 - Trade-off: No false positives from partially populated LED matrix, but misses actual LED open/short detection
 - Alternative: PWM readback comparison still detects LED failures without false positives
 - To enable: Change `mode2_val = 0x00` to `0x01` in i2c_devices.c line 283
-- See [docs/implementation/LED_VALIDATION_HARDWARE_READBACK.md](docs/implementation/LED_VALIDATION_HARDWARE_READBACK.md) section on EFLAG registers
+- See [docs/implementation/led-validation/LED_VALIDATION_HARDWARE_READBACK.md](docs/implementation/led-validation/LED_VALIDATION_HARDWARE_READBACK.md) section on EFLAG registers
 
 ## Home Assistant Integration
 
@@ -296,7 +296,7 @@ idf.py fullclean && idf.py build
 - **Solution:** Explicit no-auto-increment addressing by masking register address with 0x1F (bits 7:6 = 00)
 - **Result:** 100% accurate PWM readback for LED validation
 - **Key Insight:** "Why write when we only want to read?" - Pure read operations should have no side effects
-- **Documentation:** [tlc59116-validation-fix.md](docs/implementation/tlc59116-validation-fix.md)
+- **Documentation:** [tlc59116-validation-fix.md](docs/implementation/led-validation/tlc59116-validation-fix.md)
 
 ### Brightness System Fixes (Jan 2025)
 - Increased defaults: 60 individual (was 32), 180 global (was 120) = 7× brighter startup
@@ -364,8 +364,8 @@ filesystem_file_exists("/storage/chimes/test.pcm");  // Returns bool
 **Documentation:**
   - [external-flash-quick-start.md](docs/technical/external-flash-quick-start.md) - Quick testing guide
   - [external-flash-testing.md](docs/technical/external-flash-testing.md) - Comprehensive test guide
-  - [integration-strategy-from-chimes.md](docs/implementation/integration-strategy-from-chimes.md) - Full integration plan
-  - [chime-system-implementation-plan-w25q64.md](docs/implementation/chime-system-implementation-plan-w25q64.md) - Original implementation plan
+  - [integration-strategy-from-chimes.md](docs/archive/superseded-plans/integration-strategy-from-chimes.md) - Full integration plan (archived - superseded)
+  - [chime-system-implementation-plan-w25q64.md](docs/archive/superseded-plans/chime-system-implementation-plan-w25q64.md) - Original plan (archived - superseded)
 
 ## Troubleshooting
 
@@ -389,7 +389,7 @@ filesystem_file_exists("/storage/chimes/test.pcm");  // Returns bool
 - [User Guide](docs/user/) - Setup and configuration
 - [Developer Guide](docs/developer/) - API reference and architecture
 - [Implementation Details](docs/implementation/) - Technical deep-dives
-- [MQTT Architecture](docs/implementation/mqtt-system-architecture.md) - Complete MQTT guide
+- [MQTT Architecture](docs/implementation/mqtt/mqtt-system-architecture.md) - Complete MQTT guide
 
 **Related Files:**
 - `README.md` - User-facing documentation (15KB)
