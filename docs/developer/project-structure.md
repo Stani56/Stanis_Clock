@@ -1,298 +1,307 @@
 # Project Structure
 
-This document describes the architecture and organization of the ESP32 German Word Clock project.
+**Last Updated:** November 2025
+**Platform:** ESP32 Baseline (Audio Disabled)
+
+This document describes the architecture and organization of the ESP32 German Word Clock project after the November 2025 cleanup and restructuring.
 
 ## 📁 Repository Layout
 
 ```
-wordclock/
+Stanis_Clock/
 ├── 📄 README.md                    # Main project documentation
-├── 📄 CLAUDE.md                    # Comprehensive technical documentation  
+├── 📄 CLAUDE.md                    # Developer reference (quick technical guide)
+├── 📄 Mqtt_User_Guide.md           # MQTT command reference
 ├── 📄 LICENSE                      # MIT License
-├── 📄 CONTRIBUTING.md              # Contribution guidelines
-├── 📄 CHANGELOG.md                 # Version history
-├── 📄 SECURITY.md                  # Security policy and guidelines
-├── 📄 PROJECT_STRUCTURE.md         # This file
-├── 📄 .gitignore                   # Git ignore rules
-├── 
-├── 📁 .github/                     # GitHub-specific files
-│   ├── 📁 workflows/
-│   │   └── 📄 build.yml           # CI/CD build workflow
-│   ├── 📁 ISSUE_TEMPLATE/
-│   │   ├── 📄 bug_report.md       # Bug report template
-│   │   ├── 📄 feature_request.md  # Feature request template
-│   │   └── 📄 hardware_support.md # Hardware support template
-│   └── 📄 pull_request_template.md # PR template
-├── 
+├── 📄 partitions.csv               # Flash partition table (4MB)
+├── 📄 sdkconfig                    # ESP-IDF configuration
+├── 📄 CMakeLists.txt               # Top-level build configuration
+│
 ├── 📁 main/                        # ESP-IDF main application
-│   ├── 📄 CMakeLists.txt          # Main build configuration
-│   ├── 📄 wordclock.c             # Core application logic
-│   └── 📄 wordclock_mqtt_control.h # MQTT command definitions
-├── 
-├── 📁 components/                  # ESP-IDF components (11 total)
-│   ├── 📁 i2c_devices/           # Hardware communication layer
-│   ├── 📁 wordclock_display/     # LED matrix control
-│   ├── 📁 wordclock_time/        # German time calculations
-│   ├── 📁 adc_manager/           # Potentiometer input
-│   ├── 📁 light_sensor/          # BH1750 ambient light
-│   ├── 📁 transition_manager/    # Smooth LED animations
-│   ├── 📁 wifi_manager/          # Network connectivity
-│   ├── 📁 ntp_manager/           # Time synchronization
-│   ├── 📁 mqtt_manager/          # MQTT communication
-│   ├── 📁 mqtt_discovery/        # Home Assistant auto-discovery
-│   ├── 📁 nvs_manager/           # Persistent storage
-│   ├── 📁 status_led_manager/    # Network status LEDs
-│   ├── 📁 button_manager/        # Reset button handling
-│   ├── 📁 web_server/            # WiFi configuration portal
-│   ├── 📁 brightness_config/     # Brightness configuration
-│   └── 📁 transition_config/     # Animation configuration
-├── 
-├── 📁 build/                       # Build artifacts (generated)
-├── 📄 CMakeLists.txt              # Top-level build configuration
-├── 📄 partitions.csv              # Flash partition table
-├── 📄 sdkconfig                   # ESP-IDF configuration
-├── 📄 sdkconfig.defaults          # Default configuration
-└── 📄 sdkconfig.old               # Previous configuration backup
+│   ├── wordclock.c                 # Core application logic (397 lines)
+│   ├── wordclock_display.c/h       # German word display logic (369 lines)
+│   ├── wordclock_brightness.c/h    # Dual brightness control (338 lines)
+│   ├── wordclock_transitions.c/h   # LED animation coordination (467 lines)
+│   ├── thread_safety.c/h           # Mutex hierarchy + thread-safe accessors (334 lines)
+│   ├── wordclock_mqtt_handlers.c/h # MQTT command processing (275 lines)
+│   ├── wordclock_error_log_mqtt.c/h # Error log MQTT integration
+│   └── wordclock_mqtt_control.h    # MQTT command definitions
+│
+├── 📁 components/                  # ESP-IDF components (26 total)
+│   │
+│   ├── 📁 Hardware Layer (6 components)
+│   │   ├── i2c_devices/           # TLC59116 LED controllers + DS3231 RTC
+│   │   ├── adc_manager/           # Potentiometer input
+│   │   ├── light_sensor/          # BH1750 ambient light
+│   │   ├── button_manager/        # Reset button handling
+│   │   ├── status_led_manager/    # Network status indicators
+│   │   ├── external_flash/        # W25Q64 8MB SPI flash driver (OPTIONAL)
+│   │   └── filesystem_manager/    # LittleFS on external flash (OPTIONAL)
+│   │
+│   ├── 📁 Display Layer (3 components)
+│   │   ├── wordclock_display/     # German word logic + LED matrix
+│   │   ├── wordclock_time/        # Time calculation + grammar
+│   │   └── transition_manager/    # Smooth LED animations (20Hz)
+│   │
+│   ├── 📁 Network Layer (5 components)
+│   │   ├── wifi_manager/          # Auto-connect + AP mode
+│   │   ├── ntp_manager/           # Vienna timezone sync
+│   │   ├── mqtt_manager/          # HiveMQ Cloud TLS client
+│   │   ├── mqtt_discovery/        # Home Assistant integration (36 entities)
+│   │   └── web_server/            # WiFi configuration interface
+│   │
+│   ├── 📁 MQTT Tier 1 Components (3 components)
+│   │   ├── mqtt_schema_validator/      # Schema validation
+│   │   ├── mqtt_command_processor/     # Structured commands
+│   │   └── mqtt_message_persistence/   # Reliable delivery
+│   │
+│   ├── 📁 System Services (5 components)
+│   │   ├── nvs_manager/           # Credential storage
+│   │   ├── system_init/           # System initialization
+│   │   ├── brightness_config/     # 5-zone adaptive brightness
+│   │   ├── transition_config/     # Animation configuration
+│   │   ├── error_log_manager/     # Persistent error logging (50 entries)
+│   │   └── led_validation/        # LED hardware validation system
+│   │
+│   └── 📁 Audio Components (DISABLED - 2 components)
+│       ├── audio_manager/         # Audio playback (NOT INITIALIZED on ESP32)
+│       └── chime_library/         # Chime audio library (NOT USED on ESP32)
+│
+└── 📁 docs/                        # Comprehensive documentation
+    ├── README.md                   # Documentation navigation
+    ├── user/                       # End-user guides
+    ├── developer/                  # Developer documentation
+    ├── implementation/             # Technical deep-dives
+    │   ├── mqtt/                  # MQTT system docs
+    │   ├── led-validation/        # LED validation system
+    │   └── esp32-s3-migration/    # ESP32-S3 upgrade guide
+    ├── proposals/                  # Feature proposals
+    ├── technical/                  # Technical analysis
+    ├── testing/                    # Testing procedures
+    ├── maintenance/                # Operations & maintenance
+    └── archive/                    # Historical documentation
 ```
 
 ## 🏗️ Software Architecture
 
-### Component Dependency Graph
+### Component Structure (26 Components)
 
-```
-main/
-├─→ i2c_devices (hardware layer)
-├─→ wordclock_time (calculation layer)
-├─→ wordclock_display (display layer)
-├─→ transition_manager (animation layer)
-├─→ adc_manager (potentiometer input)
-├─→ light_sensor (ambient light)
-├─→ wifi_manager (network connectivity)
-├─→ ntp_manager (time synchronization)
-├─→ mqtt_manager (IoT communication)
-├─→ mqtt_discovery (Home Assistant)
-├─→ nvs_manager (persistent storage)
-├─→ status_led_manager (visual status)
-├─→ button_manager (user input)
-├─→ web_server (configuration portal)
-├─→ brightness_config (brightness settings)
-└─→ transition_config (animation settings)
-```
+**Hardware Layer (7 components):**
+- `i2c_devices` - TLC59116 LED controllers + DS3231 RTC
+- `adc_manager` - Potentiometer input
+- `light_sensor` - BH1750 ambient light
+- `button_manager` - Reset button handling
+- `status_led_manager` - Network status indicators
+- `external_flash` - W25Q64 8MB SPI flash driver (OPTIONAL, Phase 1 complete)
+- `filesystem_manager` - LittleFS on external flash (OPTIONAL, Phase 1 complete)
+
+**Display Layer (3 components):**
+- `wordclock_display` - German word logic + LED matrix
+- `wordclock_time` - Time calculation + grammar
+- `transition_manager` - Smooth LED animations (20Hz)
+
+**Network Layer (5 components):**
+- `wifi_manager` - Auto-connect + AP mode
+- `ntp_manager` - Vienna timezone sync
+- `mqtt_manager` - HiveMQ Cloud TLS client
+- `mqtt_discovery` - Home Assistant integration (36 entities)
+- `web_server` - WiFi configuration interface
+
+**MQTT Tier 1 Components (3 components):**
+- `mqtt_schema_validator` - Schema validation
+- `mqtt_command_processor` - Structured commands
+- `mqtt_message_persistence` - Reliable delivery
+
+**System Services (6 components):**
+- `nvs_manager` - Credential storage
+- `system_init` - System initialization
+- `brightness_config` - 5-zone adaptive brightness
+- `transition_config` - Animation configuration
+- `error_log_manager` - Persistent error logging (50 entries)
+- `led_validation` - LED hardware validation system
+
+**Audio Components (2 components - DISABLED on ESP32):**
+- `audio_manager` - Audio playback (code present but NOT initialized)
+- `chime_library` - Chime audio library (code present but NOT used)
+
+> **Note:** Audio components are present in the codebase but not initialized on ESP32 due to WiFi+MQTT+I2S hardware conflicts. They will be re-enabled on ESP32-S3 hardware. See [ESP32-S3 Migration Analysis](../implementation/esp32-s3-migration/ESP32-S3-Migration-Analysis.md).
 
 ### Architectural Layers
 
 ```
-┌─────────────────────────────────────────┐
-│               Application Layer          │
-│  (main/wordclock.c - German word logic) │
-├─────────────────────────────────────────┤
-│              IoT Integration Layer       │
-│     (WiFi, NTP, MQTT, Home Assistant)   │
-├─────────────────────────────────────────┤
-│             User Interface Layer         │
-│  (Web server, status LEDs, buttons)     │
-├─────────────────────────────────────────┤
-│              Control Layer               │
-│  (Display, transitions, brightness)     │
-├─────────────────────────────────────────┤
-│              Hardware Layer              │
-│   (I2C devices, sensors, GPIO)          │
-└─────────────────────────────────────────┘
+┌───────────────────────────────────────────────────┐
+│         Application Layer (main/)                 │
+│  wordclock.c, wordclock_display.c,               │
+│  wordclock_brightness.c, wordclock_transitions.c  │
+├───────────────────────────────────────────────────┤
+│         IoT Integration Layer                     │
+│  WiFi, NTP, MQTT, Home Assistant Discovery       │
+├───────────────────────────────────────────────────┤
+│         MQTT Tier 1 (Production Features)         │
+│  Schema validation, Command processor, Persistence│
+├───────────────────────────────────────────────────┤
+│         User Interface Layer                      │
+│  Web server, Status LEDs, Button, Error logging  │
+├───────────────────────────────────────────────────┤
+│         Control Layer                             │
+│  Display, Transitions, Brightness, LED validation│
+├───────────────────────────────────────────────────┤
+│         Hardware Layer                            │
+│  I2C devices, Sensors, GPIO, External flash      │
+└───────────────────────────────────────────────────┘
 ```
 
-## 🧩 Component Details
+## 🧩 Key Component Details
 
-### Core Components
+### Core Application (main/)
 
-#### `i2c_devices/` - Hardware Communication
-- **Purpose**: Low-level I2C device drivers
-- **Devices**: TLC59116 LED controllers, DS3231 RTC
-- **APIs**: Device initialization, register access, error handling
-- **Dependencies**: ESP-IDF `driver` component
+**Main Files:**
+- **wordclock.c** (397 lines) - System orchestration, initialization sequence
+- **wordclock_display.c** (369 lines) - German word display logic
+- **wordclock_brightness.c** (338 lines) - Dual brightness control (potentiometer + light sensor)
+- **wordclock_transitions.c** (467 lines) - LED animation coordination
+- **thread_safety.c** (334 lines) - Mutex hierarchy + 22 thread-safe accessors
+- **wordclock_mqtt_handlers.c** (275 lines) - MQTT command processing
 
-#### `wordclock_display/` - Display Control  
-- **Purpose**: High-level LED matrix control
-- **Features**: German word positioning, brightness control, state tracking
-- **APIs**: Display update, brightness setting, LED control
-- **Dependencies**: `i2c_devices`, `wordclock_time`
+### Hardware Components
 
-#### `wordclock_time/` - Time Processing
-- **Purpose**: German time calculation and word conversion
-- **Features**: Grammar rules, minute indicators, time validation
-- **APIs**: Time-to-words conversion, indicator calculation
-- **Dependencies**: `i2c_devices` (for time structures)
+#### i2c_devices
+- **10× TLC59116 LED controllers** @ 0x60-0x6A (160 LEDs total)
+- **DS3231 RTC** @ 0x68
+- **BH1750 light sensor** @ 0x23
+- **Two I2C buses:** Bus 0 (GPIO 25/26) for LEDs, Bus 1 (GPIO 18/19) for sensors
+- **I2C Speed:** 100kHz (conservative for 10-device reliability)
 
-### Enhanced Features
+#### external_flash (OPTIONAL)
+- **W25Q64 8MB SPI flash** on HSPI bus (GPIO 12/13/14/15)
+- Dynamic partition registration as "ext_storage"
+- Status: Phase 1 complete (Oct 2025)
+- System works without W25Q64 installed (graceful degradation)
 
-#### `transition_manager/` - Animation System
-- **Purpose**: Smooth LED transitions and animations
-- **Features**: Multiple curves, priority system, 20Hz updates
-- **APIs**: Transition requests, animation control, curve selection
-- **Dependencies**: `i2c_devices`, FreeRTOS tasks
+#### filesystem_manager (OPTIONAL)
+- **LittleFS filesystem** on external flash
+- Mount point: `/storage`
+- Auto-created directories: `/storage/chimes`, `/storage/config`
+- Wear leveling, power-loss protection
+- Status: Phase 1 complete (Oct 2025)
 
-#### `adc_manager/` - Potentiometer Input
-- **Purpose**: Manual brightness control via potentiometer
-- **Features**: 8-sample averaging, calibration, smoothing
-- **APIs**: ADC reading, voltage-to-brightness mapping
-- **Dependencies**: ESP-IDF `driver` (ADC)
+### Production Features (Oct 2025)
 
-#### `light_sensor/` - Ambient Light Detection
-- **Purpose**: Automatic brightness adaptation
-- **Features**: BH1750 integration, 5-zone mapping, instant response
-- **APIs**: Light reading, brightness calculation, task management
-- **Dependencies**: `i2c_devices`, FreeRTOS
+#### error_log_manager
+- **50-entry circular buffer** in NVS (survives reboots)
+- ~5.6KB storage (50 entries × 112 bytes)
+- 8 error sources: LED_VALIDATION, I2C_BUS, WIFI, MQTT, NTP, SYSTEM, POWER, SENSOR
+- 4 severities: INFO, WARNING, ERROR, CRITICAL
+- MQTT integration for remote error querying
 
-### IoT Components
+#### led_validation
+- **Post-transition validation** (~5 minutes interval)
+- Byte-by-byte PWM readback from TLC59116 hardware
+- 3-level validation: Software state → Hardware PWM → TLC fault detection
+- ~130ms validation time (16 reads × 10 devices)
+- MQTT publishing of validation results
+- Manual recovery workflow (auto-recovery disabled)
 
-#### `wifi_manager/` - Network Connectivity
-- **Purpose**: WiFi connection management
-- **Features**: Auto-connect, AP mode, credential storage
-- **APIs**: Connection management, status monitoring, event handling
-- **Dependencies**: ESP-IDF WiFi stack, `nvs_manager`
+### Thread Safety System
 
-#### `mqtt_manager/` - IoT Communication
-- **Purpose**: MQTT client with TLS encryption
-- **Features**: HiveMQ Cloud integration, command processing, status publishing
-- **APIs**: Message publishing, command handling, connection management
-- **Dependencies**: ESP-IDF MQTT client, `wifi_manager`
+**5-Level Mutex Hierarchy:**
+1. Network status (wifi_connected, ntp_synced, mqtt_connected)
+2. Brightness (global_brightness, potentiometer_individual)
+3. LED state (led_state[10][16] array)
+4. Transitions (animation state)
+5. I2C devices (bus communication)
 
-#### `ntp_manager/` - Time Synchronization
-- **Purpose**: Internet time synchronization
-- **Features**: Vienna timezone, RTC integration, automatic sync
-- **APIs**: Time sync, RTC update, status monitoring
-- **Dependencies**: ESP-IDF SNTP, `wifi_manager`, `i2c_devices`
-
-#### `mqtt_discovery/` - Home Assistant Integration
-- **Purpose**: Automatic Home Assistant entity creation
-- **Features**: 12 entity types, device grouping, zero configuration
-- **APIs**: Discovery message generation, entity management
-- **Dependencies**: `mqtt_manager`
-
-### System Components
-
-#### `nvs_manager/` - Persistent Storage
-- **Purpose**: Non-volatile storage for configuration
-- **Features**: WiFi credentials, MQTT settings, error handling
-- **APIs**: Save/load credentials, clear storage, validation
-- **Dependencies**: ESP-IDF NVS
-
-#### `status_led_manager/` - Visual Status
-- **Purpose**: Network status indication via LEDs
-- **Features**: WiFi and NTP status, multiple states (off/blink/on)
-- **APIs**: LED control, status updates, test sequences
-- **Dependencies**: ESP-IDF GPIO, FreeRTOS tasks
-
-#### `button_manager/` - User Input
-- **Purpose**: Reset button handling
-- **Features**: Long-press detection, debouncing, WiFi reset
-- **APIs**: Button monitoring, event handling
-- **Dependencies**: ESP-IDF GPIO, `nvs_manager`
-
-#### `web_server/` - Configuration Portal
-- **Purpose**: WiFi setup via web interface
-- **Features**: Network scanning, credential entry, responsive UI
-- **APIs**: Server control, request handling, page generation
-- **Dependencies**: ESP-IDF HTTP server, `wifi_manager`
-
-## 🔧 Build System
-
-### ESP-IDF Component Structure
-
-Each component follows ESP-IDF conventions:
-
-```
-component_name/
-├── CMakeLists.txt              # Build configuration
-├── component_name.c            # Implementation
-└── include/
-    └── component_name.h        # Public API
-```
-
-### Component Registration
-
-```cmake
-# CMakeLists.txt example
-idf_component_register(
-    SRCS "component_name.c"
-    INCLUDE_DIRS "include"
-    REQUIRES "dependency1" "dependency2"
-)
-```
-
-### Dependency Management
-
-- **Linear Dependencies**: Avoid circular component dependencies
-- **Minimal Requires**: Only include necessary component dependencies  
-- **Shared Types**: Define common types in central header files
-- **Function Ownership**: Each function defined in exactly one component
-
-## 🔍 Code Organization Principles
-
-### Modularity
-- Each component has a single, well-defined responsibility
-- Public APIs are minimal and focused
-- Internal implementation details are hidden
-
-### Separation of Concerns
-- **Hardware Layer**: Low-level device communication
-- **Logic Layer**: Application-specific algorithms
-- **Integration Layer**: IoT and networking features
-- **Interface Layer**: User interaction and configuration
-
-### Error Handling
-- Consistent error codes using ESP-IDF conventions
-- Graceful degradation when components fail
-- Comprehensive logging at appropriate levels
-
-### Memory Management
-- Prefer static allocation for predictable memory usage
-- Avoid dynamic allocation in interrupt contexts
-- Use FreeRTOS primitives for task synchronization
+**22 Thread-Safe Accessors** - Always use instead of direct global access
 
 ## 📊 Performance Characteristics
 
 ### Resource Usage
-- **Flash**: ~1.5MB total (application + components)
-- **RAM**: ~100KB static + ~50KB heap usage
-- **Tasks**: 6 concurrent FreeRTOS tasks
-- **Stack**: 4KB per major task
+- **Flash:** 1.2MB application (53% free in 2.5MB partition)
+- **RAM:** ~120KB static + ~60KB heap
+- **Tasks:** 8 concurrent FreeRTOS tasks
+- **Component Count:** 26 ESP-IDF components (24 active, 2 disabled)
 
 ### Timing Requirements
-- **Main Loop**: 5-second cycle for responsive operation
-- **Animation**: 20Hz (50ms) for smooth transitions
-- **Light Sensor**: 10Hz (100ms) for instant response
-- **I2C Operations**: 5-25 operations per display update
+- **LED Updates:** 12-20ms per display update
+- **Animation:** 20Hz (50ms) for smooth transitions
+- **Light Sensor:** 10Hz (100ms) task for instant response
+- **I2C Operations:** 5-25 operations per update (95% reduction via differential updates)
 
-### Scalability Limits
-- **LED Transitions**: Maximum 32 concurrent animations
-- **Component Count**: Practical limit of 11 ESP-IDF components
-- **I2C Devices**: 10 TLC59116 + 2 sensors on dual buses
+### Critical Optimization
+- **I2C Differential Updates:** Only modify changed LEDs (not all 160)
+- **LED State Tracking:** In-memory state prevents redundant I2C operations
+- **Batch Operations:** 2ms spacing between I2C commands
+- **Direct Device Handles:** No address lookups on critical path
+
+## 🔧 Build Configuration
+
+### ESP-IDF Settings
+- **Platform:** ESP32 (esp32 target)
+- **ESP-IDF Version:** 5.4.2
+- **Flash Size:** 4MB
+- **Partition Table:** Custom (see partitions.csv)
+- **FreeRTOS Hz:** 1000 (1ms tick rate)
+
+### Partition Table
+```csv
+nvs,      data, nvs,     0x9000,  0x6000,
+phy_init, data, phy,     0xf000,  0x1000,
+factory,  app,  factory, 0x10000, 0x280000,  # 2.5MB app
+storage,  data, fat,     0x290000, 0x160000,  # 1.5MB storage
+```
+
+### Component Dependencies
+
+**No Circular Dependencies:**
+- Linear dependency chain maintained
+- Shared types in central headers
+- Each function owned by exactly one component
 
 ## 🚀 Development Workflow
 
 ### Adding New Components
 
-1. **Create Directory**: `components/new_component/`
-2. **Add CMakeLists.txt**: Define build rules and dependencies
-3. **Implement API**: Create `.c` and `.h` files
-4. **Update Main**: Add component to main application dependencies
-5. **Test Integration**: Verify build and runtime functionality
-6. **Document**: Update this file and relevant documentation
+1. Create directory: `components/new_component/`
+2. Add `CMakeLists.txt` with dependencies
+3. Implement `.c` and `.h` files
+4. Add to `main/CMakeLists.txt` REQUIRES
+5. Build and test: `idf.py build`
+6. Document in this file and CLAUDE.md
 
 ### Modifying Existing Components
 
-1. **Review Dependencies**: Check which components depend on changes
-2. **Maintain APIs**: Preserve backward compatibility when possible
-3. **Update Tests**: Modify or add tests for changed functionality
-4. **Update Documentation**: Reflect changes in relevant docs
+1. Check component dependencies (avoid breaking changes)
+2. Use thread-safe accessors (never direct globals)
+3. Test I2C changes thoroughly (10 devices on bus)
+4. Update relevant documentation
 
 ### Performance Optimization
 
-1. **Profile First**: Measure actual performance bottlenecks
-2. **Optimize Critical Path**: Focus on main loop and interrupt handlers
-3. **Minimize I2C Operations**: Use differential updates and batching
-4. **Static Allocation**: Prefer compile-time memory allocation
+1. **Profile first** - Measure actual bottlenecks
+2. **Optimize I2C** - Minimize operations (biggest impact)
+3. **Static allocation** - Avoid heap in critical paths
+4. **Differential updates** - Only change what's needed
+
+## 📈 Project Evolution
+
+**Nov 2025: ESP32 Baseline Cleanup**
+- Audio subsystem removed (WiFi+MQTT+I2S conflicts)
+- Documentation reorganized (44 files, 26% reduction)
+- 25 files archived with context preservation
+- Clean, stable baseline for ESP32 hardware
+
+**Oct 2025: Production Features**
+- LED validation system with hardware readback
+- Persistent error logging (50 entries, NVS)
+- TLC59116 auto-increment pointer fix
+
+**Future: ESP32-S3 Migration**
+- YelloByte YB-ESP32-S3-AMP board
+- Concurrent WiFi+MQTT+I2S support
+- Re-enable audio_manager and chime_library
+- microSD card storage (FatFS migration)
+- See: [ESP32-S3 Migration Analysis](../implementation/esp32-s3-migration/ESP32-S3-Migration-Analysis.md)
 
 ---
 
-This structure supports the project's evolution from a simple word clock to a comprehensive IoT device while maintaining clean architecture and ESP-IDF best practices.
+**For detailed technical information, see [CLAUDE.md](../../CLAUDE.md) and [docs/](../README.md)**
