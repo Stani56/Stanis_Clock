@@ -27,10 +27,10 @@
 
 ### Migration Scope
 
-**Total Files Requiring Changes:** 8 files
-**Total Lines of Code to Change:** ~15 lines
-**Estimated Migration Time:** 1-2 hours
-**Risk Level:** LOW (all changes are GPIO pin number updates)
+**GPIO Pin Changes:** 8 files (~15 lines of code)
+**Filesystem Migration:** 3 components (external_flash → sdcard_manager, filesystem_manager → FatFS API)
+**Total Estimated Migration Time:** 4-6 hours (1-2h GPIO + 2-4h filesystem)
+**Risk Level:** MEDIUM (GPIO changes are low risk, filesystem migration requires careful testing)
 
 ### Key Benefits
 
@@ -46,7 +46,7 @@
 ⚠️ **PSRAM configuration must be enabled** (board has 2MB)
 ⚠️ **Target must be changed from esp32 → esp32s3**
 ⚠️ **Flash size must be increased to 8MB** (board has 8MB vs current 4MB)
-⚠️ **External storage decision needed** (microSD vs W25Q64)
+✅ **External storage: microSD card (FINALIZED)** - Migrate from W25Q64 + LittleFS to microSD + FatFS
 
 ---
 
@@ -397,6 +397,37 @@ Use both storage solutions:
 
 ---
 
+### ✅ DECISION FINALIZED: microSD Storage (Option A)
+
+**Date:** 2025-11-03
+**Decision:** Use built-in microSD card storage, migrate from W25Q64 + LittleFS to microSD + FatFS
+
+**Key Changes Required:**
+1. **Replace external_flash component** with sdcard_manager component
+2. **Migrate filesystem_manager** from LittleFS to FatFS API
+3. **Update CMakeLists.txt** to include FatFS components
+4. **Mount point:** Keep `/storage` for API compatibility
+5. **File operations:** Migrate from LittleFS API to POSIX/FatFS API
+
+**Benefits Confirmed:**
+- ✅ 1000× more storage capacity (8GB+ vs 8MB)
+- ✅ No GPIO conflicts with YB board design
+- ✅ Easy file management (removable SD card)
+- ✅ Standard ESP-IDF FatFS support (well-tested)
+- ✅ Future-proof for audio expansion
+
+**Components to Update:**
+- `components/external_flash/` → Archive (not used on ESP32-S3)
+- `components/filesystem_manager/` → Migrate to FatFS
+- `main/wordclock.c` → Update initialization calls
+- New: `components/sdcard_manager/` → Handle SD card init
+
+**Estimated Migration Time:** 2-4 hours for filesystem API changes
+
+**Testing Priority:** High - Must verify SD card detection, mount, read/write before audio
+
+---
+
 ### 7. Filesystem Manager Component
 
 **File:** `components/filesystem_manager/`
@@ -620,9 +651,12 @@ storage,  data, fat,     0x520000, 0x2E0000, # 3MB storage
 
 ---
 
-## External Storage Decision
+## External Storage Decision ✅ FINALIZED: microSD Card
 
-### Comparison Matrix
+**Decision Date:** 2025-11-03
+**Selected Option:** Built-in microSD card with FatFS filesystem
+
+### Comparison Matrix (For Reference)
 
 | Feature | W25Q64 SPI Flash | microSD Card (Built-in) |
 |---------|------------------|-------------------------|
