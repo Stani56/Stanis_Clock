@@ -1,5 +1,10 @@
 # ESP32 German Word Clock - Complete MQTT Commands for MQTTX
 
+**Current Platform:** ESP32 Baseline (Audio Disabled)
+**Last Updated:** November 2025
+
+> **Note:** Audio commands (`test_audio`, `play_audio`, `list_audio_files`) have been removed from the ESP32 baseline due to WiFi+MQTT+I2S hardware conflicts. Audio functionality will be available on ESP32-S3 hardware. See [ESP32-S3 Migration Analysis](../../implementation/esp32-s3-migration/ESP32-S3-Migration-Analysis.md) for details.
+
 ## MQTTX Connection Setup
 
 **Connection Details:**
