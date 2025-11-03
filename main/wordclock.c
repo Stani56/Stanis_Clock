@@ -30,7 +30,7 @@
 #include "status_led_manager.h"
 #include "external_flash.h"
 #include "filesystem_manager.h"
-#include "audio_manager.h"
+// #include "audio_manager.h"  // DISABLED: Audio causes WiFi+MQTT+I2S crashes on ESP32
 
 // Refactored modules
 #include "wordclock_display.h"
@@ -108,24 +108,13 @@ static esp_err_t initialize_hardware(void)
         } else {
             ESP_LOGI(TAG, "✅ Filesystem ready at /storage");
 
-            // Initialize audio manager (I2S for MAX98357A amplifier)
-            ESP_LOGI(TAG, "Initializing audio manager (I2S)...");
-            ret = audio_manager_init();
-            if (ret != ESP_OK) {
-                ESP_LOGW(TAG, "Audio manager init failed - continuing without audio");
-                ESP_LOGW(TAG, "This is normal if MAX98357A amplifier is not installed");
-            } else {
-                ESP_LOGI(TAG, "✅ Audio subsystem ready");
-
-                // Play startup test tone to verify audio hardware
-                ESP_LOGI(TAG, "🔊 Playing startup test tone...");
-                ret = audio_play_test_tone();
-                if (ret == ESP_OK) {
-                    ESP_LOGI(TAG, "✅ Startup test tone playing (440Hz for 2 seconds)");
-                } else {
-                    ESP_LOGW(TAG, "⚠️ Startup test tone failed: %s", esp_err_to_name(ret));
-                }
-            }
+            // Audio manager initialization DISABLED for ESP32 baseline
+            // Reason: ESP32 hardware cannot handle WiFi+MQTT+I2S concurrently due to DMA conflicts
+            // - I2S audio playback causes WiFi disconnections and MQTT instability
+            // - Current workaround (disconnect MQTT before audio) is not production-ready
+            // - Audio will be re-enabled on ESP32-S3 which has improved DMA architecture
+            ESP_LOGI(TAG, "ℹ️  Audio subsystem disabled (ESP32 baseline - stable WiFi+MQTT operation)");
+            ESP_LOGI(TAG, "ℹ️  For audio support, migrate to ESP32-S3 (see docs/hardware/ESP32-S3-Migration-Analysis.md)");
         }
     }
 

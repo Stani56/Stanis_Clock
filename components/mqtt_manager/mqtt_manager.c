@@ -17,7 +17,7 @@
 #include "mqtt_command_processor.h" // ✅ Tier 1: Structured commands
 #include "mqtt_message_persistence.h" // ✅ Tier 1: Reliable delivery
 #include "../../main/thread_safety.h"  // Thread-safe network status flags
-#include "audio_manager.h"
+// #include "audio_manager.h"  // DISABLED: Audio causes WiFi+MQTT+I2S crashes on ESP32
 #include "filesystem_manager.h"
 
 static const char *TAG = "MQTT_MANAGER";
@@ -856,60 +856,9 @@ static esp_err_t mqtt_handle_command(const char* payload, int payload_len) {
             }
         }
     }
-    else if (strcmp(command, "test_audio") == 0) {
-        ESP_LOGI(TAG, "🔊 Test audio command received - playing 440Hz tone");
-        esp_err_t ret = audio_play_test_tone();
-        if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "✅ Test tone playback started (2 seconds)");
-            mqtt_publish_status("audio_test_tone_playing");
-        } else {
-            ESP_LOGE(TAG, "❌ Test tone playback failed: %s", esp_err_to_name(ret));
-            mqtt_publish_status("audio_test_tone_failed");
-        }
-    }
-    else if (strncmp(command, "play_audio:", 11) == 0) {
-        // Extract filename from command (format: "play_audio:/storage/chimes/quarter.pcm")
-        const char *filepath = command + 11;
-        ESP_LOGI(TAG, "🔊 Play audio command received: %s", filepath);
-
-        // Check if file exists
-        if (filesystem_file_exists(filepath)) {
-            esp_err_t ret = audio_play_from_file(filepath);
-            if (ret == ESP_OK) {
-                ESP_LOGI(TAG, "✅ Audio playback started: %s", filepath);
-                mqtt_publish_status("audio_playback_started");
-            } else {
-                ESP_LOGE(TAG, "❌ Audio playback failed: %s", esp_err_to_name(ret));
-                mqtt_publish_status("audio_playback_failed");
-            }
-        } else {
-            ESP_LOGW(TAG, "Audio file not found: %s", filepath);
-            mqtt_publish_status("audio_file_not_found");
-        }
-    }
-    else if (strcmp(command, "list_audio_files") == 0) {
-        ESP_LOGI(TAG, "📁 List audio files command received");
-
-        // List files in /storage/chimes directory
-        filesystem_file_info_t file_list[20];
-        size_t file_count = 0;
-
-        esp_err_t ret = filesystem_list_files("/storage/chimes", file_list, 20, &file_count);
-        if (ret == ESP_OK && file_count > 0) {
-            ESP_LOGI(TAG, "Found %zu audio files:", file_count);
-            for (size_t i = 0; i < file_count; i++) {
-                ESP_LOGI(TAG, "  [%zu] %s (%zu bytes)", i, file_list[i].name, file_list[i].size);
-            }
-
-            // Log file count to MQTT
-            char file_count_str[64];
-            snprintf(file_count_str, sizeof(file_count_str), "audio_files_found_count_%zu", file_count);
-            mqtt_publish_status(file_count_str);
-        } else {
-            ESP_LOGW(TAG, "No audio files found or error reading directory");
-            mqtt_publish_status("audio_files_none_found");
-        }
-    }
+    // Audio commands DISABLED (test_audio, play_audio, list_audio_files)
+    // Reason: ESP32 cannot handle WiFi+MQTT+I2S concurrently
+    // These will be re-enabled on ESP32-S3 hardware
     else {
         ESP_LOGW(TAG, "Unknown command: '%s'", command);
         mqtt_publish_status("unknown_command");
