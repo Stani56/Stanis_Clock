@@ -83,7 +83,7 @@ Run the current ESP32 codebase on an ESP32-S3-N16R8 board with minimal changes t
 |---------|-------|----------|--------|
 | **Flash Size** | 4MB | **16MB** | ✅ Must update sdkconfig and partition table |
 | **PSRAM** | None | **8MB** | ✅ Must enable in sdkconfig |
-| **GPIO 34** | ADC1_CH6 | **ADC1_CH3** | ⚠️ Different ADC channel mapping |
+| **GPIO 34 (Potentiometer)** | ADC1_CH6 | **GPIO 3 (ADC1_CH2)** | ✅ Rewired to GPIO 3, code update required |
 | **ADC2** | Conflicts with WiFi | Same | ✅ ADC1 still safe with WiFi |
 | **I2C Buses** | 2 | 2 | ✅ Same API, different recommended pins |
 | **USB** | UART only | Native USB | ✅ Better debugging experience |
@@ -208,33 +208,51 @@ storage,  data, fat,     0x410000, 0xBE0000,  # 12MB storage (was 1.5MB, +800%)
 - 12MB storage: Room for future chime audio files, config backups
 - Same layout structure: Easy to revert if needed
 
-### 3. ADC Channel Mapping (GPIO 34)
+### 3. ADC Channel Mapping (GPIO 34 → GPIO 3)
 
-**Current Code:**
+**Current Code (ESP32):**
 ```c
 // components/adc_manager/include/adc_manager.h
 #define ADC_POTENTIOMETER_UNIT ADC_UNIT_1
 #define ADC_POTENTIOMETER_CHANNEL ADC_CHANNEL_6     // GPIO 34 (ADC1_CH6)
 ```
 
-**ESP32 GPIO 34:** ADC1_CH6
-**ESP32-S3 GPIO 34:** Does not exist (only 0-21, 26-48 available)
+**Hardware Change:**
+- **ESP32:** Potentiometer connected to GPIO 34 (ADC1_CH6)
+- **ESP32-S3:** Potentiometer will be **rewired to GPIO 3 (ADC1_CH2)**
 
-**⚠️ CRITICAL ISSUE:** GPIO 34 does not exist on ESP32-S3!
-
-**Workaround Options:**
-1. **Ignore potentiometer for test** (simplest) - System will log errors but continue
-2. **Map to GPIO 4** (ADC1_CH3) - Requires wiring change
-3. **Map to GPIO 5** (ADC1_CH4) - Requires wiring change
-4. **Disable ADC manager** - Comment out initialization in `wordclock.c`
-
-**Recommendation:** Use Option 4 (disable ADC) for compatibility test:
+**Required Code Change:**
 ```c
-// main/wordclock.c (line ~95)
-// adc_manager_init();  // DISABLED for ESP32-S3 compatibility test (GPIO 34 unavailable)
+// components/adc_manager/include/adc_manager.h
+#define ADC_POTENTIOMETER_UNIT ADC_UNIT_1
+#define ADC_POTENTIOMETER_CHANNEL ADC_CHANNEL_2     // GPIO 3 (ADC1_CH2) - Changed from CH6
 ```
 
-### 4. No Other Code Changes Required
+**File to Modify:**
+- `components/adc_manager/include/adc_manager.h` (line 18)
+- Change: `ADC_CHANNEL_6` → `ADC_CHANNEL_2`
+- Change comment: `GPIO 34 (ADC1_CH6)` → `GPIO 3 (ADC1_CH2)`
+
+**Rationale:**
+- GPIO 34 does not exist on ESP32-S3 (only GPIOs 0-21, 26-48 available)
+- GPIO 3 is ADC1_CH2, which is safe to use with WiFi (ADC1 does not conflict)
+- GPIO 3 is available and has no other conflicts
+- Minimal code change (single #define)
+
+### 4. I2C and Other GPIO Pins
+
+**All external connections will be rewired to match ESP32-S3 GPIO assignments.**
+
+The following GPIO changes are handled by hardware rewiring (no code changes needed initially for test):
+- I2C0 (LEDs): SDA GPIO 25→8, SCL GPIO 26→9
+- I2C1 (Sensors): SDA GPIO 18→2, SCL GPIO 19→4
+- WiFi LED: GPIO 21 (no change)
+- NTP LED: GPIO 22→18
+- Reset Button: GPIO 5→0
+
+**For full compatibility test with all hardware working, GPIO pin #defines will need updates.**
+
+### 5. No Other Code Changes Required
 
 **Components that DO NOT need changes:**
 - WiFi Manager (API identical)
@@ -249,18 +267,25 @@ storage,  data, fat,     0x410000, 0xBE0000,  # 12MB storage (was 1.5MB, +800%)
 
 ---
 
-## Non-Functional Components
+## Hardware Configuration Status
 
-### Hardware Components That Will Fail (Expected)
+### Hardware Components With Wiring Changes
 
-| Component | Reason | Expected Behavior |
-|-----------|--------|-------------------|
-| **I2C LEDs** | Wrong GPIO pins (25/26 vs board pins) | I2C bus init fails, LED display dark |
-| **I2C Sensors** | Wrong GPIO pins (18/19 vs board pins) | I2C bus init fails, no RTC/light sensor |
-| **Potentiometer** | GPIO 34 does not exist on ESP32-S3 | ADC init fails, brightness control disabled |
-| **Status LEDs** | Wrong GPIO pins (21/22) | LEDs won't light (might conflict with other pins) |
-| **Reset Button** | Wrong GPIO pin (5) | Button presses not detected |
-| **Audio** | Already disabled in baseline | No impact (already non-functional) |
+Since **all external GPIO connections will be rewired** to match ESP32-S3 pin assignments, the following components require **code updates** to match the new GPIO numbers:
+
+| Component | ESP32 GPIO | ESP32-S3 GPIO (Rewired) | Code Change Required |
+|-----------|------------|-------------------------|----------------------|
+| **I2C0 SDA (LEDs)** | 25 | **8** | ✅ Update `I2C_LEDS_MASTER_SDA_IO` |
+| **I2C0 SCL (LEDs)** | 26 | **9** | ✅ Update `I2C_LEDS_MASTER_SCL_IO` |
+| **I2C1 SDA (Sensors)** | 18 | **2** | ✅ Update `I2C_SENSORS_MASTER_SDA_IO` |
+| **I2C1 SCL (Sensors)** | 19 | **4** | ✅ Update `I2C_SENSORS_MASTER_SCL_IO` |
+| **Potentiometer (ADC)** | 34 (CH6) | **3 (CH2)** | ✅ Update `ADC_CHANNEL_6` → `ADC_CHANNEL_2` |
+| **WiFi Status LED** | 21 | **21** | ✅ No change needed |
+| **NTP Status LED** | 22 | **18** | ✅ Update `STATUS_LED_NTP_PIN` |
+| **Reset Button** | 5 | **0** | ✅ Update `RESET_BUTTON_PIN` |
+| **Audio** | Disabled | Disabled | ℹ️ No change (already disabled) |
+
+**Important:** All external wiring will be changed to match ESP32-S3 GPIO numbers. The code must be updated accordingly for hardware to function.
 
 ### System Components That SHOULD Work
 
@@ -279,6 +304,10 @@ storage,  data, fat,     0x410000, 0xBE0000,  # 12MB storage (was 1.5MB, +800%)
 
 ### Boot Sequence (What You'll See)
 
+**Scenario 1: Without Code Updates (Network-Only Test)**
+
+This scenario tests ESP-IDF compatibility with minimal changes (target + flash + PSRAM only).
+
 **✅ Should Work:**
 ```
 I (298) boot: ESP-IDF v5.4.2
@@ -286,7 +315,7 @@ I (303) boot: chip: ESP32-S3 (revision 0)
 I (308) boot.esp32s3: SPI Speed      : 80MHz
 I (313) boot.esp32s3: SPI Mode       : DIO
 I (317) boot.esp32s3: SPI Flash Size : 16MB
-I (322) boot: PSRAM: 8MB Octal PSRAM found
+I (322) boot: PSRAM: 8MB Octal PSRAM found         ← ✅ CRITICAL: Verify PSRAM detected
 I (327) nvs_manager: NVS initialized successfully
 I (445) wifi_manager: Connected to WiFi with stored credentials
 I (1205) ntp_manager: NTP time synchronization complete!
@@ -294,7 +323,7 @@ I (2340) mqtt_manager: === SECURE MQTT CONNECTION ESTABLISHED ===
 I (2450) mqtt_discovery: ✅ All discovery configurations published successfully
 ```
 
-**❌ Expected Failures (Non-Critical):**
+**❌ Expected Failures (Hardware, Non-Critical for network test):**
 ```
 E (234) i2c_devices: Failed to initialize I2C bus 0 (LEDs): Invalid argument
 E (239) i2c_devices: Failed to initialize I2C bus 1 (Sensors): Invalid argument
@@ -304,6 +333,33 @@ W (254) status_led_manager: Status LEDs not functional (wrong GPIO)
 E (259) wordclock: ⚠️  LED display initialization failed (I2C bus error)
 I (264) wordclock: ℹ️  Continuing without LED display (compatibility test mode)
 ```
+
+---
+
+**Scenario 2: With Code Updates + Rewiring (Full Functional Test)**
+
+This scenario tests complete hardware compatibility after GPIO updates and rewiring.
+
+**✅ Should Work (Everything!):**
+```
+I (298) boot: ESP-IDF v5.4.2
+I (303) boot: chip: ESP32-S3 (revision 0)
+I (317) boot.esp32s3: SPI Flash Size : 16MB
+I (322) boot: PSRAM: 8MB Octal PSRAM found
+I (327) nvs_manager: NVS initialized successfully
+I (340) i2c_devices: I2C bus 0 initialized successfully (GPIO 8/9)  ← ✅ LEDs work
+I (345) i2c_devices: I2C bus 1 initialized successfully (GPIO 2/4)  ← ✅ Sensors work
+I (350) adc_manager: ADC initialized (GPIO 3, ADC1_CH2)            ← ✅ Potentiometer works
+I (355) button_manager: Reset button configured (GPIO 0)           ← ✅ Button works
+I (360) status_led_manager: Status LEDs configured (GPIO 21/18)    ← ✅ LEDs work
+I (445) wifi_manager: Connected to WiFi with stored credentials
+I (1205) ntp_manager: NTP time synchronization complete!
+I (2340) mqtt_manager: === SECURE MQTT CONNECTION ESTABLISHED ===
+I (2450) mqtt_discovery: ✅ All discovery configurations published successfully
+I (2500) wordclock: LED display showing time: 14:23                ← ✅ Display works!
+```
+
+**No Errors Expected** - All hardware should function normally after code updates.
 
 ### MQTT Topics (Verify Connectivity)
 
@@ -575,21 +631,36 @@ idf.py -p /dev/ttyUSB0 flash monitor
 
 ## Recommendations
 
-### For This Compatibility Test
+### Two Test Approaches
+
+**Approach 1: Network-Only Compatibility Test (Minimal Changes)**
 1. ✅ **DO:** Test WiFi + MQTT + NTP infrastructure
 2. ✅ **DO:** Verify system stability (no crashes)
 3. ✅ **DO:** Check PSRAM initialization (8MB should be detected)
 4. ✅ **DO:** Monitor serial output for unexpected errors
-5. ❌ **DON'T:** Expect any hardware to work (I2C, ADC, GPIOs)
-6. ❌ **DON'T:** Wire external hardware yet (no GPIO changes made)
+5. ❌ **DON'T:** Expect hardware to work (I2C, ADC, GPIOs will fail)
+6. ❌ **DON'T:** Wire external hardware yet (GPIO pins wrong)
 
-### For Full Migration (After Test)
-Once compatibility test passes, proceed with full ESP32-S3 migration:
-1. Use YelloByte YB-ESP32-S3-AMP board (built-in audio + microSD)
-2. Update all GPIO pin assignments (see [ESP32-S3-Migration-Analysis.md](ESP32-S3-Migration-Analysis.md))
-3. Migrate filesystem from W25Q64 + LittleFS to microSD + FatFS
-4. Re-enable audio subsystem
-5. Full hardware validation
+**Changes Required:** Target + flash size + PSRAM only (30 minutes)
+**Value:** Validates ESP-IDF 5.4.2 compatibility with ESP32-S3 hardware
+
+---
+
+**Approach 2: Full Functional Test (Complete Migration)**
+1. ✅ **DO:** Rewire all external connections to ESP32-S3 GPIO pins
+2. ✅ **DO:** Update all GPIO #defines in code (8 files)
+3. ✅ **DO:** Test all hardware components (LEDs, sensors, potentiometer, buttons)
+4. ✅ **DO:** Verify LED display shows time correctly
+5. ✅ **DO:** Test brightness control and transitions
+6. ✅ **DO:** Verify MQTT commands work with hardware
+
+**Changes Required:**
+- Hardware rewiring (GPIO 34→3, I2C pins, button, LEDs)
+- Code updates (8 files, ~15 lines)
+- Partition table update (4MB → 16MB flash)
+- Full testing (1-2 hours)
+
+**Value:** Validates complete ESP32-S3 migration with all hardware functional
 
 ---
 
@@ -611,20 +682,38 @@ Once compatibility test passes, proceed with full ESP32-S3 migration:
 
 ## Summary
 
-This compatibility test requires **ONLY configuration changes** (no code modifications):
-1. Change target: `esp32` → `esp32s3`
-2. Change flash size: `4MB` → `16MB`
-3. Enable PSRAM: `CONFIG_SPIRAM=y`
-4. Update partition table for 16MB flash
+### Two Testing Paths Available
 
-**Expected outcome:** System boots, WiFi+MQTT+NTP work, all hardware fails (expected).
+**Path 1: Network-Only Compatibility Test**
+- **Changes:** Configuration only (target + flash + PSRAM)
+- **Code modifications:** NONE
+- **Hardware:** No rewiring needed
+- **Expected outcome:** WiFi+MQTT+NTP work, hardware fails (expected)
+- **Test duration:** 30 minutes
+- **Risk level:** LOW (easy rollback)
+- **Value:** Validates ESP-IDF 5.4.2 compatibility with ESP32-S3
 
-**Test duration:** 30 minutes (build + flash + verification)
+**Path 2: Full Functional Migration**
+- **Changes:** Configuration + GPIO code updates + hardware rewiring
+- **Code modifications:** 8 files (~15 lines total)
+  - I2C pins: GPIO 25/26→8/9, GPIO 18/19→2/4
+  - ADC pin: GPIO 34 (CH6) → GPIO 3 (CH2)
+  - Button: GPIO 5→0
+  - NTP LED: GPIO 22→18
+- **Hardware:** Rewire all external connections to ESP32-S3 pins
+- **Expected outcome:** **Everything works** (full hardware functional)
+- **Test duration:** 1-2 hours (rewiring + code + testing)
+- **Risk level:** MEDIUM (more changes, but reversible)
+- **Value:** Complete ESP32-S3 migration with all features working
 
-**Risk level:** LOW (easy rollback, no code changes)
+### Key Decision: GPIO 34 → GPIO 3 (ADC1_CH2)
 
-**Value:** Validates ESP-IDF compatibility before investing time in full GPIO migration.
+**User Decision:** Potentiometer will be **rewired from GPIO 34 to GPIO 3** on ESP32-S3.
+
+- ESP32: GPIO 34 (ADC1_CH6) - dedicated ADC input
+- ESP32-S3: GPIO 3 (ADC1_CH2) - ADC1 safe with WiFi
+- Code change: `ADC_CHANNEL_6` → `ADC_CHANNEL_2` in `adc_manager.h`
 
 ---
 
-**Document Status:** Analysis complete, ready for implementation when ESP32-S3-N16R8 hardware available.
+**Document Status:** Analysis complete with GPIO 3 confirmed for potentiometer. Ready for implementation when ESP32-S3-N16R8 hardware available.
