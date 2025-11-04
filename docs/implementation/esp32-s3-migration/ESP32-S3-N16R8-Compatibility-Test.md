@@ -243,12 +243,14 @@ storage,  data, fat,     0x410000, 0xBE0000,  # 12MB storage (was 1.5MB, +800%)
 
 **All external connections will be rewired to match ESP32-S3 GPIO assignments.**
 
-The following GPIO changes are handled by hardware rewiring (no code changes needed initially for test):
+The following GPIO changes are handled by hardware rewiring:
 - I2C0 (LEDs): SDA GPIO 25→8, SCL GPIO 26→9
-- I2C1 (Sensors): SDA GPIO 18→2, SCL GPIO 19→4
+- **I2C1 (Sensors): SDA GPIO 18→1, SCL GPIO 19→18** ⚠️ Changed to avoid ADC2+WiFi conflict
 - WiFi LED: GPIO 21 (no change)
-- NTP LED: GPIO 22→18
+- **NTP LED: GPIO 22→38** ⚠️ Changed (GPIO 18 used for I2C1 SCL)
 - Reset Button: GPIO 5→0
+
+**⚠️ CRITICAL:** GPIO 2 and 4 have ADC2 which conflicts with WiFi - cannot be used!
 
 **For full compatibility test with all hardware working, GPIO pin #defines will need updates.**
 
@@ -277,14 +279,15 @@ Since **all external GPIO connections will be rewired** to match ESP32-S3 pin as
 |-----------|------------|-------------------------|----------------------|
 | **I2C0 SDA (LEDs)** | 25 | **8** | ✅ Update `I2C_LEDS_MASTER_SDA_IO` |
 | **I2C0 SCL (LEDs)** | 26 | **9** | ✅ Update `I2C_LEDS_MASTER_SCL_IO` |
-| **I2C1 SDA (Sensors)** | 18 | **2** | ✅ Update `I2C_SENSORS_MASTER_SDA_IO` |
-| **I2C1 SCL (Sensors)** | 19 | **4** | ✅ Update `I2C_SENSORS_MASTER_SCL_IO` |
+| **I2C1 SDA (Sensors)** | 18 | **1** | ✅ Update `I2C_SENSORS_MASTER_SDA_IO` (ADC1_CH0, WiFi safe) |
+| **I2C1 SCL (Sensors)** | 19 | **18** | ✅ Update `I2C_SENSORS_MASTER_SCL_IO` (no ADC) |
 | **Potentiometer (ADC)** | 34 (CH6) | **3 (CH2)** | ✅ Update `ADC_CHANNEL_6` → `ADC_CHANNEL_2` |
 | **WiFi Status LED** | 21 | **21** | ✅ No change needed |
-| **NTP Status LED** | 22 | **18** | ✅ Update `STATUS_LED_NTP_PIN` |
+| **NTP Status LED** | 22 | **38** | ✅ Update `STATUS_LED_NTP_PIN` (no ADC) |
 | **Reset Button** | 5 | **0** | ✅ Update `RESET_BUTTON_PIN` |
 | **Audio** | Disabled | Disabled | ℹ️ No change (already disabled) |
 
+**⚠️ CRITICAL:** I2C1 changed from GPIO 2/4 to GPIO 1/18 to avoid ADC2+WiFi conflict!
 **Important:** All external wiring will be changed to match ESP32-S3 GPIO numbers. The code must be updated accordingly for hardware to function.
 
 ### System Components That SHOULD Work
@@ -348,10 +351,10 @@ I (317) boot.esp32s3: SPI Flash Size : 16MB
 I (322) boot: PSRAM: 8MB Octal PSRAM found
 I (327) nvs_manager: NVS initialized successfully
 I (340) i2c_devices: I2C bus 0 initialized successfully (GPIO 8/9)  ← ✅ LEDs work
-I (345) i2c_devices: I2C bus 1 initialized successfully (GPIO 2/4)  ← ✅ Sensors work
+I (345) i2c_devices: I2C bus 1 initialized successfully (GPIO 1/18) ← ✅ Sensors work
 I (350) adc_manager: ADC initialized (GPIO 3, ADC1_CH2)            ← ✅ Potentiometer works
 I (355) button_manager: Reset button configured (GPIO 0)           ← ✅ Button works
-I (360) status_led_manager: Status LEDs configured (GPIO 21/18)    ← ✅ LEDs work
+I (360) status_led_manager: Status LEDs configured (GPIO 21/38)    ← ✅ LEDs work
 I (445) wifi_manager: Connected to WiFi with stored credentials
 I (1205) ntp_manager: NTP time synchronization complete!
 I (2340) mqtt_manager: === SECURE MQTT CONNECTION ESTABLISHED ===
@@ -696,15 +699,16 @@ idf.py -p /dev/ttyUSB0 flash monitor
 **Path 2: Full Functional Migration**
 - **Changes:** Configuration + GPIO code updates + hardware rewiring
 - **Code modifications:** 8 files (~15 lines total)
-  - I2C pins: GPIO 25/26→8/9, GPIO 18/19→2/4
+  - I2C pins: GPIO 25/26→8/9, **GPIO 18/19→1/18** ⚠️ Changed to avoid ADC2
   - ADC pin: GPIO 34 (CH6) → GPIO 3 (CH2)
   - Button: GPIO 5→0
-  - NTP LED: GPIO 22→18
+  - NTP LED: **GPIO 22→38** ⚠️ Changed (GPIO 18 used for I2C1)
 - **Hardware:** Rewire all external connections to ESP32-S3 pins
 - **Expected outcome:** **Everything works** (full hardware functional)
 - **Test duration:** 1-2 hours (rewiring + code + testing)
 - **Risk level:** MEDIUM (more changes, but reversible)
 - **Value:** Complete ESP32-S3 migration with all features working
+- **⚠️ CRITICAL:** Avoids GPIO 2/4/14-17 (ADC2+WiFi conflict)
 
 ### Key Decision: GPIO 34 → GPIO 3 (ADC1_CH2)
 

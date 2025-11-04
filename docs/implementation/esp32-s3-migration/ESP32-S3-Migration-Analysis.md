@@ -72,10 +72,10 @@
 | Component | GPIO Pins | Notes |
 |-----------|-----------|-------|
 | I2C Bus 0 (LEDs) | **SDA=8, SCL=9** | ✅ Default I2C on YB board |
-| I2C Bus 1 (Sensors) | **SDA=2, SCL=4** | ✅ Available GPIOs |
-| ADC Potentiometer | **GPIO 1 (ADC1_CH0)** | ✅ ADC1 works with WiFi |
+| I2C Bus 1 (Sensors) | **SDA=1, SCL=18** | ✅ ADC1/No ADC (WiFi safe) ⚠️ Changed from GPIO 2/4 |
+| ADC Potentiometer | **GPIO 3 (ADC1_CH2)** | ✅ ADC1 works with WiFi |
 | Status LED (WiFi) | **GPIO 21** | ✅ No change needed |
-| Status LED (NTP) | **GPIO 18** | ⚠️ GPIO 22 conflicts with audio |
+| Status LED (NTP) | **GPIO 38** | ✅ No ADC conflicts ⚠️ Changed from GPIO 18 |
 | Reset Button | **GPIO 0** | ✅ Boot button (common on ESP32-S3) |
 | Audio I2S (**Built-in** 2× MAX98357A) | **BCLK=5, LRCLK=6, DIN=7** | ✅ **Pre-wired, not exposed on headers** |
 | External Flash W25Q64 | **⚠️ CONFLICT** | ❌ GPIO 10/11/12/13 used by microSD |
@@ -91,17 +91,18 @@
 |----------|------------|---------------|-----------------|
 | **I2C Bus 0 SDA (LEDs)** | 25 | **8** | YES |
 | **I2C Bus 0 SCL (LEDs)** | 26 | **9** | YES |
-| **I2C Bus 1 SDA (Sensors)** | 18 | **2** | YES |
-| **I2C Bus 1 SCL (Sensors)** | 19 | **4** | YES |
-| **Potentiometer (ADC)** | 34 (ADC1_CH6) | **1 (ADC1_CH0)** | YES |
+| **I2C Bus 1 SDA (Sensors)** | 18 | **1** | YES ⚠️ ADC1_CH0, WiFi safe |
+| **I2C Bus 1 SCL (Sensors)** | 19 | **18** | YES ⚠️ No ADC |
+| **Potentiometer (ADC)** | 34 (ADC1_CH6) | **3 (ADC1_CH2)** | YES ⚠️ WiFi safe |
 | **WiFi Status LED** | 21 | **21** | NO |
-| **NTP Status LED** | 22 | **18** | YES |
+| **NTP Status LED** | 22 | **38** | YES ⚠️ No ADC |
 | **Reset Button** | 5 | **0** | YES |
 | **I2S BCLK (Audio)** | 33 | **5** | YES (built-in) |
 | **I2S LRCLK (Audio)** | 27 | **6** | YES (built-in) |
 | **I2S DOUT/DIN (Audio)** | 32 | **7** | YES (built-in) |
 
 **Total GPIO Changes:** 10 pin numbers
+**⚠️ CRITICAL:** Changed I2C1 and NTP LED to avoid GPIO 2/4/14-17 (ADC2+WiFi conflict)
 
 ---
 
