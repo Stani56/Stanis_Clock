@@ -16,22 +16,21 @@
 
 ## Complete GPIO Assignment Map (ESP32-S3-N16R8)
 
-### External Connections (11 pins - User Must Wire)
+### External Connections (9 pins - User Must Wire)
 
 | GPIO | Function | Component | Type | Conflicts? |
 |------|----------|-----------|------|------------|
 | **0** | Reset Button | button_manager | Input | ✅ None - Boot button safe |
-| **1** | **RESERVED** | - | - | ⚠️ **Was planned for potentiometer, NOW AVAILABLE** |
-| **2** | I2C1 SDA (Sensors) | i2c_devices | I/O | ✅ None - ADC2_CH1 but not used for ADC |
+| **1** | I2C1 SDA (Sensors) | i2c_devices | I/O | ✅ None - ADC1_CH0, WiFi safe |
 | **3** | **Potentiometer** | adc_manager | Input | ✅ None - ADC1_CH2, WiFi safe |
-| **4** | I2C1 SCL (Sensors) | i2c_devices | Output | ✅ None - ADC2_CH0 but not used for ADC |
 | **8** | I2C0 SDA (LEDs) | i2c_devices | I/O | ✅ None - YB board default I2C |
 | **9** | I2C0 SCL (LEDs) | i2c_devices | Output | ✅ None - YB board default I2C |
-| **18** | NTP Status LED | status_led_manager | Output | ✅ None - GPIO safe |
+| **18** | I2C1 SCL (Sensors) | i2c_devices | Output | ✅ None - No ADC, WiFi safe |
 | **21** | WiFi Status LED | status_led_manager | Output | ✅ None - Same as ESP32 |
+| **38** | NTP Status LED | status_led_manager | Output | ✅ None - No ADC, WiFi safe |
 
-**Total External Pins:** 9 (vs ESP32: 11)
-**Reason for Reduction:** No external audio (built-in), GPIO 1 now available
+**Total External Pins:** 8 (vs ESP32: 11)
+**Reason for Reduction:** No external audio (built-in), ADC2 pins avoided (WiFi conflict)
 
 ### Internal Connections (Pre-wired on YB Board)
 
@@ -64,18 +63,19 @@
 
 | GPIO | ADC Channel | WiFi Safe? | Notes |
 |------|-------------|------------|-------|
-| **1** | ADC1_CH0 | ✅ Yes | Available (was planned for pot, now free) |
-| **14** | ADC2_CH3 | ❌ No | ADC2 conflicts with WiFi |
-| **15** | ADC2_CH4 | ❌ No | ADC2 conflicts with WiFi |
-| **16** | ADC2_CH5 | ❌ No | ADC2 conflicts with WiFi |
-| **17** | ADC2_CH6 | ❌ No | ADC2 conflicts with WiFi |
-| **38** | - | ✅ Yes | General GPIO |
+| **2** | ADC2_CH1 | ❌ No | ADC2 conflicts with WiFi - DO NOT USE |
+| **4** | ADC2_CH0 | ❌ No | ADC2 conflicts with WiFi - DO NOT USE |
+| **14** | ADC2_CH3 | ❌ No | ADC2 conflicts with WiFi - DO NOT USE |
+| **15** | ADC2_CH4 | ❌ No | ADC2 conflicts with WiFi - DO NOT USE |
+| **16** | ADC2_CH5 | ❌ No | ADC2 conflicts with WiFi - DO NOT USE |
+| **17** | ADC2_CH6 | ❌ No | ADC2 conflicts with WiFi - DO NOT USE |
 | **45** | - | ✅ Yes | General GPIO |
 | **46** | - | ✅ Yes | General GPIO |
 | **48** | - | ✅ Yes | General GPIO |
 
-**Total Available:** 9 GPIOs (1, 14-17, 38, 45-46, 48)
-**WiFi-Safe Available:** 5 GPIOs (1, 38, 45-46, 48)
+**Total Available:** 9 GPIOs (2, 4, 14-17, 45-46, 48)
+**WiFi-Safe Available:** 3 GPIOs (45-46, 48)
+**⚠️ CRITICAL:** GPIO 2, 4, 14-17 have ADC2 - cannot be used with WiFi active!
 
 ---
 
@@ -89,12 +89,13 @@
 - GPIO 9: SCL (Output, no ADC function on this pin)
 - **Conflict Check:** ✅ None - Dedicated I2C pins
 
-**I2C Bus 1 (GPIO 2/4) - Sensors:**
+**I2C Bus 1 (GPIO 1/18) - Sensors:**
 - DS3231 RTC @ 0x68
 - BH1750 Light Sensor @ 0x23
-- GPIO 2: SDA (I/O, ADC2_CH1 but not used for ADC)
-- GPIO 4: SCL (Output, ADC2_CH0 but not used for ADC)
+- GPIO 1: SDA (I/O, ADC1_CH0, WiFi safe)
+- GPIO 18: SCL (Output, No ADC, WiFi safe)
 - **Conflict Check:** ✅ None - Separate bus from LEDs to avoid address conflict
+- **⚠️ CRITICAL FIX:** Changed from GPIO 2/4 (ADC2, WiFi conflict) to GPIO 1/18 (WiFi safe)
 
 **Why Two Buses?**
 - TLC59116 #9 uses address 0x68 (conflicts with DS3231 @ 0x68)
@@ -111,10 +112,10 @@
 **ADC Channel Mapping (ESP32-S3):**
 | GPIO | ADC Channel | WiFi Safe? | Used By |
 |------|-------------|------------|---------|
-| 1 | ADC1_CH0 | ✅ Yes | **AVAILABLE** (was planned for pot) |
-| 2 | ADC2_CH1 | ❌ No | I2C1 SDA (not using ADC function) |
+| 1 | ADC1_CH0 | ✅ Yes | **I2C1 SDA (Sensors)** - not using ADC function |
+| 2 | ADC2_CH1 | ❌ No | **AVAILABLE** - ADC2 conflicts with WiFi, DO NOT USE |
 | 3 | ADC1_CH2 | ✅ Yes | **POTENTIOMETER** ✅ |
-| 4 | ADC2_CH0 | ❌ No | I2C1 SCL (not using ADC function) |
+| 4 | ADC2_CH0 | ❌ No | **AVAILABLE** - ADC2 conflicts with WiFi, DO NOT USE |
 | 5 | ADC1_CH4 | ✅ Yes | I2S BCLK (not using ADC function) |
 | 6 | ADC1_CH5 | ✅ Yes | I2S LRCLK (not using ADC function) |
 | 7 | ADC1_CH6 | ✅ Yes | I2S DIN (not using ADC function) |
@@ -183,11 +184,11 @@
 |----------|-----------|---------------|----------------|
 | **I2C0 SDA** | 25 | **8** | ✅ Safe |
 | **I2C0 SCL** | 26 | **9** | ✅ Safe |
-| **I2C1 SDA** | 18 | **2** | ✅ Safe (not using ADC) |
-| **I2C1 SCL** | 19 | **4** | ✅ Safe (not using ADC) |
+| **I2C1 SDA** | 18 | **1** | ✅ Safe (ADC1, WiFi safe) |
+| **I2C1 SCL** | 19 | **18** | ✅ Safe (no ADC) |
 | **Potentiometer** | 34 (ADC1_CH6) | **3 (ADC1_CH2)** | ✅ Safe (WiFi compatible) |
 | **WiFi LED** | 21 | **21** | ✅ Safe (no change) |
-| **NTP LED** | 22 | **18** | ✅ Safe |
+| **NTP LED** | 22 | **38** | ✅ Safe (no ADC) |
 | **Reset Button** | 5 | **0** | ✅ Safe |
 | **I2S BCLK** | 33 (disabled) | **5 (internal)** | ✅ Safe |
 | **I2S LRCLK** | 27 (disabled) | **6 (internal)** | ✅ Safe |
@@ -195,6 +196,7 @@
 
 **Total Changes:** 10 GPIO reassignments
 **Conflicts Found:** 0
+**⚠️ CRITICAL FIX:** Changed I2C1 from GPIO 2/4 (ADC2, WiFi conflict) to GPIO 1/18 (WiFi safe)
 
 ---
 
@@ -206,12 +208,13 @@
 
 ### ✅ No ADC2 + WiFi Conflicts
 - Potentiometer uses ADC1 (GPIO 3) ✅
-- I2C GPIO 2/4 have ADC2 channels but not used for ADC ✅
-- All ADC2 GPIOs (14-17) are unused ✅
+- I2C1 uses GPIO 1/18 (ADC1/No ADC, WiFi safe) ✅
+- **All ADC2 GPIOs (2, 4, 14-17) are AVOIDED** ✅
+- **CRITICAL:** ADC2 conflicts with WiFi regardless of function used!
 
 ### ✅ No I2C Address Conflicts
 - LED controllers (0x60-0x6A) on I2C0 (GPIO 8/9) ✅
-- DS3231 RTC (0x68) on I2C1 (GPIO 2/4) ✅
+- DS3231 RTC (0x68) on I2C1 (GPIO 1/18) ✅
 - Separate buses prevent 0x68 conflict ✅
 
 ### ✅ No Flash/PSRAM GPIO Usage
@@ -236,17 +239,17 @@
 
 ## Final GPIO Assignment List (ESP32-S3-N16R8)
 
-### User Must Wire (9 External Pins)
+### User Must Wire (8 External Pins)
 
 ```
 GPIO 0  ← Reset Button (boot button)
-GPIO 2  ← I2C1 SDA (DS3231 + BH1750)
+GPIO 1  ← I2C1 SDA (DS3231 + BH1750) - ADC1_CH0, WiFi safe ✅
 GPIO 3  ← Potentiometer (ADC1_CH2) ★ USER CONFIRMED
-GPIO 4  ← I2C1 SCL (DS3231 + BH1750)
 GPIO 8  ← I2C0 SDA (10× TLC59116 LEDs)
 GPIO 9  ← I2C0 SCL (10× TLC59116 LEDs)
-GPIO 18 ← NTP Status LED
+GPIO 18 ← I2C1 SCL (DS3231 + BH1750) - No ADC, WiFi safe ✅
 GPIO 21 ← WiFi Status LED
+GPIO 38 ← NTP Status LED - No ADC, WiFi safe ✅
 ```
 
 ### Pre-Wired on Board (12 Internal Pins - No User Action)
@@ -270,10 +273,11 @@ GPIO 39-42   ← JTAG (internal)
 ### Available for Future (9 GPIOs)
 
 ```
-GPIO 1       ← ADC1_CH0 (WiFi safe) ★ NOW AVAILABLE
-GPIO 14-17   ← ADC2 (NOT WiFi safe)
-GPIO 38, 45-46, 48 ← General GPIO (WiFi safe)
+GPIO 2, 4, 14-17 ← ADC2 (⚠️ NOT WiFi safe - DO NOT USE)
+GPIO 45-46, 48   ← General GPIO (WiFi safe) ★ AVAILABLE
 ```
+
+**⚠️ CRITICAL:** GPIO 2, 4, 14-17 have ADC2 which conflicts with WiFi. Do not use these pins!
 
 ---
 
@@ -283,8 +287,8 @@ GPIO 38, 45-46, 48 ← General GPIO (WiFi safe)
 ```c
 #define I2C_LEDS_MASTER_SDA_IO         8      // Was 25
 #define I2C_LEDS_MASTER_SCL_IO         9      // Was 26
-#define I2C_SENSORS_MASTER_SDA_IO      2      // Was 18
-#define I2C_SENSORS_MASTER_SCL_IO      4      // Was 19
+#define I2C_SENSORS_MASTER_SDA_IO      1      // Was 18 (ADC1_CH0, WiFi safe)
+#define I2C_SENSORS_MASTER_SCL_IO      18     // Was 19 (no ADC)
 ```
 
 **2. components/adc_manager/include/adc_manager.h (1 change):**
@@ -300,7 +304,7 @@ GPIO 38, 45-46, 48 ← General GPIO (WiFi safe)
 
 **4. components/status_led_manager/include/status_led_manager.h (1 change):**
 ```c
-#define STATUS_LED_NTP_PIN GPIO_NUM_18  // Was GPIO_NUM_22
+#define STATUS_LED_NTP_PIN GPIO_NUM_38  // Was GPIO_NUM_22 (no ADC, WiFi safe)
 // WiFi LED stays GPIO_NUM_21 (no change)
 ```
 

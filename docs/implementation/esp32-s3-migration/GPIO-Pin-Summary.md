@@ -56,10 +56,10 @@
 | GPIO | Function | Direction | Component | Internal/External | Notes |
 |------|----------|-----------|-----------|-------------------|-------|
 | **0** | Reset Button | Input | button_manager | **External** | Boot button (WiFi credentials clear) |
-| **1** | Not Used | - | - | - | Available (ADC1_CH0) |
-| **2** | I2C1 SDA | I/O | i2c_devices | **External** | DS3231 RTC + BH1750 sensor |
+| **1** | I2C1 SDA | I/O | i2c_devices | **External** | DS3231 RTC + BH1750 (ADC1_CH0, WiFi safe) |
+| **2** | Not Used | - | - | - | ADC2_CH1 ⚠️ WiFi conflict - DO NOT USE |
 | **3** | Potentiometer | Input | adc_manager | **External** | ADC1_CH2, brightness control |
-| **4** | I2C1 SCL | Output | i2c_devices | **External** | DS3231 RTC + BH1750 sensor |
+| **4** | Not Used | - | - | - | ADC2_CH0 ⚠️ WiFi conflict - DO NOT USE |
 | **5** | I2S BCLK | Output | audio_manager | Internal | **Built-in** MAX98357A #1 (not on headers) |
 | **6** | I2S LRCLK | Output | audio_manager | Internal | **Built-in** MAX98357A (not on headers) |
 | **7** | I2S DIN | Output | audio_manager | Internal | **Built-in** MAX98357A (not on headers) |
@@ -69,18 +69,18 @@
 | **11** | microSD MOSI | Output | sdcard_manager | Internal | **Built-in** microSD (not on headers) |
 | **12** | microSD CLK | Output | sdcard_manager | Internal | **Built-in** microSD (not on headers) |
 | **13** | microSD MISO | Input | sdcard_manager | Internal | **Built-in** microSD (not on headers) |
-| **14** | Not Used | - | - | - | Available (ADC2_CH3) |
-| **15** | Not Used | - | - | - | Available (ADC2_CH4) |
-| **16** | Not Used | - | - | - | Available (ADC2_CH5) |
-| **17** | Not Used | - | - | - | Available (ADC2_CH6) |
-| **18** | NTP Status LED | Output | status_led_manager | **External** | NTP sync indicator |
+| **14** | Not Used | - | - | - | ADC2_CH3 ⚠️ WiFi conflict - DO NOT USE |
+| **15** | Not Used | - | - | - | ADC2_CH4 ⚠️ WiFi conflict - DO NOT USE |
+| **16** | Not Used | - | - | - | ADC2_CH5 ⚠️ WiFi conflict - DO NOT USE |
+| **17** | Not Used | - | - | - | ADC2_CH6 ⚠️ WiFi conflict - DO NOT USE |
+| **18** | I2C1 SCL | Output | i2c_devices | **External** | DS3231 RTC + BH1750 (no ADC) |
 | **19** | USB D- | I/O | USB | Internal | Native USB (Rev.3 only - do not use for GPIO) |
 | **20** | USB D+ | I/O | USB | Internal | Native USB (Rev.3 only - do not use for GPIO) |
 | **21** | WiFi Status LED | Output | status_led_manager | **External** | WiFi connection indicator (no change) |
 | **22-26** | Not Available | - | - | - | Reserved for flash/PSRAM (do not use) |
 | **27-32** | Not Available | - | - | - | Reserved for flash/PSRAM (do not use) |
 | **33-37** | Not Available | - | - | - | Reserved (do not use) |
-| **38** | Not Used | - | - | - | Available |
+| **38** | NTP Status LED | Output | status_led_manager | **External** | NTP sync indicator (no ADC) |
 | **39-42** | Not Available | - | - | Internal | MTCK, MTDO, MTDI, MTMS (JTAG) |
 | **43** | UART TX | Output | USB/Serial | Internal | Debug console (do not use) |
 | **44** | UART RX | Input | USB/Serial | Internal | Debug console (do not use) |
@@ -90,14 +90,15 @@
 | **48** | Not Used | - | - | - | Available |
 
 ### ESP32-S3 Summary Statistics
-- **Total GPIOs Used:** 9 external + 7 internal = 16 pins
-- **External Connections:** 9 pins (0, 2, 3, 4, 8, 9, 18, 21) - reduced from ESP32's 11
+- **Total GPIOs Used:** 8 external + 7 internal = 15 pins
+- **External Connections:** 8 pins (0, 1, 3, 8, 9, 18, 21, 38) - reduced from ESP32's 11
 - **Internal Only (Built-in):**
   - Audio: GPIO 5, 6, 7 (2× MAX98357A amplifiers - not on headers)
   - microSD: GPIO 10, 11, 12, 13 (not on headers)
   - USB: GPIO 19, 20 (native USB - Rev.3 only)
   - UART: GPIO 43, 44 (debug console)
-- **Available for Expansion:** GPIO 1, 14-17, 38, 45-46, 48
+- **Available for Expansion (WiFi-safe):** GPIO 45-46, 48
+- **⚠️ ADC2 GPIOs (WiFi conflict):** GPIO 2, 4, 14-17 - DO NOT USE with WiFi!
 
 ---
 
