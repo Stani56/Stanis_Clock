@@ -56,9 +56,9 @@
 | GPIO | Function | Direction | Component | Internal/External | Notes |
 |------|----------|-----------|-----------|-------------------|-------|
 | **0** | Reset Button | Input | button_manager | **External** | Boot button (WiFi credentials clear) |
-| **1** | Potentiometer | Input | adc_manager | **External** | ADC1_CH0, brightness control |
+| **1** | Not Used | - | - | - | Available (ADC1_CH0) |
 | **2** | I2C1 SDA | I/O | i2c_devices | **External** | DS3231 RTC + BH1750 sensor |
-| **3** | Not Used | - | - | - | Available (ADC1_CH2) |
+| **3** | Potentiometer | Input | adc_manager | **External** | ADC1_CH2, brightness control |
 | **4** | I2C1 SCL | Output | i2c_devices | **External** | DS3231 RTC + BH1750 sensor |
 | **5** | I2S BCLK | Output | audio_manager | Internal | **Built-in** MAX98357A #1 (not on headers) |
 | **6** | I2S LRCLK | Output | audio_manager | Internal | **Built-in** MAX98357A (not on headers) |
@@ -90,14 +90,14 @@
 | **48** | Not Used | - | - | - | Available |
 
 ### ESP32-S3 Summary Statistics
-- **Total GPIOs Used:** 11 external + 7 internal = 18 pins
-- **External Connections:** 11 pins (0, 1, 2, 4, 8, 9, 18, 21) - same as ESP32
+- **Total GPIOs Used:** 9 external + 7 internal = 16 pins
+- **External Connections:** 9 pins (0, 2, 3, 4, 8, 9, 18, 21) - reduced from ESP32's 11
 - **Internal Only (Built-in):**
   - Audio: GPIO 5, 6, 7 (2× MAX98357A amplifiers - not on headers)
   - microSD: GPIO 10, 11, 12, 13 (not on headers)
   - USB: GPIO 19, 20 (native USB - Rev.3 only)
   - UART: GPIO 43, 44 (debug console)
-- **Available for Expansion:** GPIO 3, 14-17, 38, 45-46, 48
+- **Available for Expansion:** GPIO 1, 14-17, 38, 45-46, 48
 
 ---
 
@@ -111,7 +111,7 @@
 | **I2C0 SCL (LEDs)** | 26 | **9** | ✅ CHANGE | YB board default I2C |
 | **I2C1 SDA (Sensors)** | 18 | **2** | ✅ CHANGE | Available GPIO |
 | **I2C1 SCL (Sensors)** | 19 | **4** | ✅ CHANGE | Available GPIO |
-| **Potentiometer (ADC)** | 34 (ADC1_CH6) | **1 (ADC1_CH0)** | ✅ CHANGE | ADC1 works with WiFi |
+| **Potentiometer (ADC)** | 34 (ADC1_CH6) | **3 (ADC1_CH2)** | ✅ CHANGE | ADC1 works with WiFi |
 | **WiFi Status LED** | 21 | **21** | ❌ NO CHANGE | Same GPIO |
 | **NTP Status LED** | 22 | **18** | ✅ CHANGE | GPIO 22 conflicts with audio |
 | **Reset Button** | 5 | **0** | ✅ CHANGE | Boot button standard |
@@ -194,7 +194,7 @@
 | **I2C0 SCL (LEDs)** | GPIO 26 | GPIO 9 | 10× TLC59116 controllers |
 | **I2C1 SDA (Sensors)** | GPIO 18 | GPIO 2 | DS3231 + BH1750 |
 | **I2C1 SCL (Sensors)** | GPIO 19 | GPIO 4 | DS3231 + BH1750 |
-| **Potentiometer** | GPIO 34 | GPIO 1 | Analog input |
+| **Potentiometer** | GPIO 34 | GPIO 3 | Analog input (ADC1_CH2) |
 | **NTP Status LED** | GPIO 22 | GPIO 18 | LED + resistor |
 | **Reset Button** | GPIO 5 | GPIO 0 | Button + pull-up |
 | **WiFi Status LED** | GPIO 21 | GPIO 21 | No change needed ✅ |
