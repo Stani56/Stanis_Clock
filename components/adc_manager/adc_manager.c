@@ -243,23 +243,9 @@ bool adc_manager_is_initialized(void)
 esp_err_t adc_calibration_init(void)
 {
     ESP_LOGI(TAG, "Initializing ADC calibration");
-    
-    // Try line fitting calibration (most widely supported)
-    adc_cali_line_fitting_config_t line_config = {
-        .unit_id = ADC_POTENTIOMETER_UNIT,
-        .atten = ADC_POTENTIOMETER_ATTEN,
-        .bitwidth = ADC_POTENTIOMETER_BITWIDTH,
-    };
-    
-    esp_err_t ret = adc_cali_create_scheme_line_fitting(&line_config, &adc_mgr.cali_handle);
-    if (ret == ESP_OK) {
-        ESP_LOGI(TAG, "ADC calibration scheme (line fitting) created");
-        return ESP_OK;
-    }
-    
-    ESP_LOGW(TAG, "Line fitting calibration failed: %s", esp_err_to_name(ret));
-    
-    // Curve fitting might not be available on all ESP32 variants
+    esp_err_t ret = ESP_FAIL;
+
+    // Try curve fitting first (ESP32-S3, ESP32-C3, ESP32-C2)
     #if CONFIG_ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
     adc_cali_curve_fitting_config_t cali_config = {
         .unit_id = ADC_POTENTIOMETER_UNIT,
@@ -267,16 +253,36 @@ esp_err_t adc_calibration_init(void)
         .atten = ADC_POTENTIOMETER_ATTEN,
         .bitwidth = ADC_POTENTIOMETER_BITWIDTH,
     };
-    
+
     ret = adc_cali_create_scheme_curve_fitting(&cali_config, &adc_mgr.cali_handle);
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "ADC calibration scheme (curve fitting) created");
+        adc_mgr.calibration_enabled = true;
         return ESP_OK;
     }
-    
-    ESP_LOGW(TAG, "Curve fitting calibration also failed: %s", esp_err_to_name(ret));
+
+    ESP_LOGW(TAG, "Curve fitting calibration failed: %s", esp_err_to_name(ret));
     #endif
-    
+
+    // Try line fitting calibration (ESP32, ESP32-S2)
+    #if CONFIG_ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
+    adc_cali_line_fitting_config_t line_config = {
+        .unit_id = ADC_POTENTIOMETER_UNIT,
+        .atten = ADC_POTENTIOMETER_ATTEN,
+        .bitwidth = ADC_POTENTIOMETER_BITWIDTH,
+    };
+
+    ret = adc_cali_create_scheme_line_fitting(&line_config, &adc_mgr.cali_handle);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "ADC calibration scheme (line fitting) created");
+        adc_mgr.calibration_enabled = true;
+        return ESP_OK;
+    }
+
+    ESP_LOGW(TAG, "Line fitting calibration also failed: %s", esp_err_to_name(ret));
+    #endif
+
+    adc_mgr.calibration_enabled = false;
     return ret;
 }
 
@@ -284,21 +290,29 @@ void adc_calibration_deinit(void)
 {
     if (adc_mgr.cali_handle) {
         ESP_LOGI(TAG, "Deinitializing ADC calibration");
-        
-        // Try line fitting deletion first (most common)
-        esp_err_t ret = adc_cali_delete_scheme_line_fitting(adc_mgr.cali_handle);
-        if (ret != ESP_OK) {
-            // If line fitting fails, try curve fitting deletion
-            #if CONFIG_ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
-            ret = adc_cali_delete_scheme_curve_fitting(adc_mgr.cali_handle);
-            if (ret != ESP_OK) {
-                ESP_LOGW(TAG, "Failed to delete calibration scheme: %s", esp_err_to_name(ret));
-            }
-            #else
-            ESP_LOGW(TAG, "Failed to delete line fitting calibration scheme: %s", esp_err_to_name(ret));
-            #endif
+        esp_err_t ret = ESP_FAIL;
+
+        // Try curve fitting deletion first (ESP32-S3, ESP32-C3, ESP32-C2)
+        #if CONFIG_ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
+        ret = adc_cali_delete_scheme_curve_fitting(adc_mgr.cali_handle);
+        if (ret == ESP_OK) {
+            adc_mgr.cali_handle = NULL;
+            adc_mgr.calibration_enabled = false;
+            return;
         }
-        
+        #endif
+
+        // Try line fitting deletion (ESP32, ESP32-S2)
+        #if CONFIG_ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
+        ret = adc_cali_delete_scheme_line_fitting(adc_mgr.cali_handle);
+        if (ret == ESP_OK) {
+            adc_mgr.cali_handle = NULL;
+            adc_mgr.calibration_enabled = false;
+            return;
+        }
+        #endif
+
+        ESP_LOGW(TAG, "Failed to delete calibration scheme: %s", esp_err_to_name(ret));
         adc_mgr.cali_handle = NULL;
         adc_mgr.calibration_enabled = false;
     }

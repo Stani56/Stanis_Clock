@@ -12,8 +12,8 @@ extern "C" {
 #endif
 
 // GPIO Pin Definitions
-#define WIFI_STATUS_LED_PIN     GPIO_NUM_21
-#define NTP_STATUS_LED_PIN      GPIO_NUM_22
+#define WIFI_STATUS_LED_PIN     GPIO_NUM_21  // ESP32-S3: No change
+#define NTP_STATUS_LED_PIN      GPIO_NUM_38  // ESP32-S3: GPIO 38 (no ADC, WiFi safe)
 
 // Status enumerations (simplified for standalone operation)
 typedef enum {
