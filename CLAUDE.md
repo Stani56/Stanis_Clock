@@ -1,28 +1,32 @@
-# ESP32 German Word Clock - Developer Reference
+# ESP32-S3 German Word Clock - Developer Reference
 
 ## Quick Reference
 
-**Platform:** ESP32 with ESP-IDF 5.4.2
+**Platform:** ESP32-S3-N16R8 (YelloByte YB-ESP32-S3-AMP) with ESP-IDF 5.4.2
 **Repository:** https://github.com/stani56/Stanis_Clock
 **Status:** Production-ready IoT word clock with Home Assistant integration
+**Legacy:** ESP32-PICO-D4 version available at tag `v1.0-esp32-final`
 
 ## Essential Build Information
 
-### Hardware Setup
+### Hardware Setup (ESP32-S3)
 ```
-GPIO 18/19 → I2C Sensors (DS3231 RTC, BH1750 light sensor)
-GPIO 25/26 → I2C LEDs (10× TLC59116 controllers @ 0x60-0x6A)
-GPIO 34    → Potentiometer (brightness control)
-GPIO 21/22 → Status LEDs (WiFi/NTP indicators)
-GPIO 5     → Reset button (WiFi credentials clear)
-GPIO 12/13/14/15 → SPI External Flash (W25Q64, 8MB for chime audio - OPTIONAL)
-                    GPIO 12=MISO, 13=MOSI, 14=CLK, 15=CS
+GPIO 1/18  → I2C Sensors (DS3231 RTC, BH1750 light sensor) - ADC1_CH0 + no ADC
+GPIO 8/9   → I2C LEDs (10× TLC59116 controllers @ 0x60-0x6A) - YB board default
+GPIO 3     → Potentiometer (brightness control) - ADC1_CH2, WiFi safe
+GPIO 21/38 → Status LEDs (WiFi/NTP indicators) - WiFi safe
+GPIO 0     → Reset button (boot button)
+GPIO 5/6/7 → Internal I2S Audio (2× MAX98357A) - built-in on YB board
+GPIO 10/11/12/13 → Internal microSD (SDMMC) - built-in on YB board
 ```
+
+**CRITICAL:** Avoid GPIO 2, 4, 14-17 (ADC2 channels) - Hardware conflict with WiFi!
 
 **LED Matrix:** 10 rows × 16 columns (160 LEDs)
 **I2C Speed:** 100kHz (conservative for reliability)
-**Flash:** 4MB minimum, 2.5MB app partition (see `partitions.csv`)
-**External Flash:** W25Q64 8MB SPI (optional, for chime system expansion)
+**Flash:** 16MB (ESP32-S3-N16R8), 2.5MB app partition (see `partitions.csv`)
+**PSRAM:** 8MB Octal PSRAM @ 80MHz
+**Audio:** 2× MAX98357A I2S amplifiers (built-in, for future chime system)
 
 ### Quick Start
 ```bash

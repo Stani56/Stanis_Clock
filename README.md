@@ -48,9 +48,21 @@
 
 ## 🚀 Quick Start
 
+### Hardware Platforms
+
+**Current (main branch): ESP32-S3-N16R8 (YelloByte YB-ESP32-S3-AMP)**
+- 16MB Flash, 8MB PSRAM
+- Built-in audio (2× MAX98357A) and microSD card slot
+- GPIO: I2C0=8/9, I2C1=1/18, Button=0, LEDs=21/38, ADC=GPIO3
+
+**Legacy (v1.0-esp32-final tag): ESP32-PICO-D4**
+- 4MB Flash, no PSRAM
+- GPIO: I2C0=25/26, I2C1=18/19, Button=5, LEDs=21/22, ADC=GPIO34
+- To use: `git checkout v1.0-esp32-final`
+
 ### Prerequisites
 - **ESP-IDF 5.4.2** installed and configured
-- **ESP32 development board** with 4MB flash memory minimum
+- **ESP32-S3 development board** (or ESP32 for legacy version)
 - **Hardware components** (see [Hardware Requirements](#-hardware-requirements))
 
 ### 1. Flash and Setup
