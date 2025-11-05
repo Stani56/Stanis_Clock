@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 // Button Configuration
-#define RESET_BUTTON_PIN            GPIO_NUM_5      // Reset button on GPIO 5
+#define RESET_BUTTON_PIN            GPIO_NUM_0      // ESP32-S3: Boot button on GPIO 0
 #define BUTTON_LONG_PRESS_MS        5000            // 5 seconds for long press
 #define BUTTON_CHECK_INTERVAL_MS    50              // Check button every 50ms
 

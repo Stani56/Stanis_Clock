@@ -13,10 +13,10 @@ extern "C" {
 // I2C Configuration
 #define I2C_LEDS_MASTER_PORT           0
 #define I2C_SENSORS_MASTER_PORT        1
-#define I2C_LEDS_MASTER_SDA_IO         25
-#define I2C_LEDS_MASTER_SCL_IO         26
-#define I2C_SENSORS_MASTER_SDA_IO      18
-#define I2C_SENSORS_MASTER_SCL_IO      19
+#define I2C_LEDS_MASTER_SDA_IO         8      // ESP32-S3: GPIO 8 (default I2C0 SDA on YB board)
+#define I2C_LEDS_MASTER_SCL_IO         9      // ESP32-S3: GPIO 9 (default I2C0 SCL on YB board)
+#define I2C_SENSORS_MASTER_SDA_IO      1      // ESP32-S3: GPIO 1 (ADC1_CH0, WiFi safe)
+#define I2C_SENSORS_MASTER_SCL_IO      18     // ESP32-S3: GPIO 18 (no ADC, WiFi safe)
 #define I2C_LEDS_MASTER_FREQ_HZ        100000
 #define I2C_SENSORS_MASTER_FREQ_HZ     100000
 
