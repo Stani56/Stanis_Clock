@@ -17,7 +17,7 @@
 #include "mqtt_command_processor.h" // ✅ Tier 1: Structured commands
 #include "mqtt_message_persistence.h" // ✅ Tier 1: Reliable delivery
 #include "../../main/thread_safety.h"  // Thread-safe network status flags
-// #include "audio_manager.h"  // DISABLED: Audio causes WiFi+MQTT+I2S crashes on ESP32
+#include "audio_manager.h"  // ESP32-S3: Built-in MAX98357A on GPIO 5/6/7
 #include "filesystem_manager.h"
 
 static const char *TAG = "MQTT_MANAGER";
@@ -856,9 +856,18 @@ static esp_err_t mqtt_handle_command(const char* payload, int payload_len) {
             }
         }
     }
-    // Audio commands DISABLED (test_audio, play_audio, list_audio_files)
-    // Reason: ESP32 cannot handle WiFi+MQTT+I2S concurrently
-    // These will be re-enabled on ESP32-S3 hardware
+    // Audio commands (ESP32-S3 with built-in MAX98357A)
+    else if (strcmp(command, "test_audio") == 0) {
+        ESP_LOGI(TAG, "🔊 Audio test tone requested via MQTT");
+        esp_err_t ret = audio_play_test_tone();
+        if (ret == ESP_OK) {
+            mqtt_publish_status("test_audio_playing");
+            ESP_LOGI(TAG, "✅ Test tone playing (440Hz for 2 seconds)");
+        } else {
+            mqtt_publish_status("test_audio_failed");
+            ESP_LOGE(TAG, "❌ Test tone failed: %s", esp_err_to_name(ret));
+        }
+    }
     else {
         ESP_LOGW(TAG, "Unknown command: '%s'", command);
         mqtt_publish_status("unknown_command");
