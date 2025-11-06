@@ -2,22 +2,22 @@
 
 ## Quick Reference
 
-**Platform:** ESP32-S3-N16R8 (YelloByte YB-ESP32-S3-AMP) with ESP-IDF 5.4.2
+**Platform:** ESP32-S3-N16R8-DevKitC-1 with external MAX98357A + microSD
 **Repository:** https://github.com/stani56/Stanis_Clock
-**Status:** Production-ready IoT word clock with Home Assistant integration
+**Status:** Production-ready IoT word clock with Home Assistant integration + Audio system (Phase 2.1 ✅)
 **Legacy:** ESP32-PICO-D4 version available at tag `v1.0-esp32-final`
 
 ## Essential Build Information
 
-### Hardware Setup (ESP32-S3)
+### Hardware Setup (ESP32-S3-DevKitC-1)
 ```
 GPIO 1/18  → I2C Sensors (DS3231 RTC, BH1750 light sensor) - ADC1_CH0 + no ADC
-GPIO 8/9   → I2C LEDs (10× TLC59116 controllers @ 0x60-0x6A) - YB board default
+GPIO 8/9   → I2C LEDs (10× TLC59116 controllers @ 0x60-0x6A)
 GPIO 3     → Potentiometer (brightness control) - ADC1_CH2, WiFi safe
 GPIO 21/38 → Status LEDs (WiFi/NTP indicators) - WiFi safe
 GPIO 0     → Reset button (boot button)
-GPIO 5/6/7 → Internal I2S Audio (2× MAX98357A) - built-in on YB board
-GPIO 10/11/12/13 → Internal microSD (SDMMC) - built-in on YB board
+GPIO 5/6/7 → External I2S Audio (MAX98357A): BCLK=5, LRCLK=6, DIN=7 ✅ Phase 2.1 complete
+GPIO 10/11/12/13 → External microSD (SPI): CS=10, MOSI=11, CLK=12, MISO=13
 ```
 
 **CRITICAL:** Avoid GPIO 2, 4, 14-17 (ADC2 channels) - Hardware conflict with WiFi!
