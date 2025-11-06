@@ -14,7 +14,7 @@
 #include "wordclock_transitions.h"
 #include "brightness_config.h"
 #include "thread_safety.h"
-// #include "audio_manager.h"  // DISABLED: Audio causes WiFi+MQTT+I2S crashes on ESP32
+#include "audio_manager.h"  // ESP32-S3: Built-in MAX98357A on GPIO 5/6/7
 #include "filesystem_manager.h"
 #include "mqtt_manager.h"
 #include "esp_log.h"
@@ -64,6 +64,15 @@ esp_err_t mqtt_handle_basic_commands(const char* command)
         bool active = is_transition_test_mode();
         ESP_LOGI(TAG, "Transition test mode: %s", active ? "ACTIVE" : "INACTIVE");
         return ESP_OK;
+    } else if (strcmp(command, "test_audio") == 0) {
+        ESP_LOGI(TAG, "🔊 Audio test tone requested via MQTT");
+        esp_err_t ret = audio_play_test_tone();
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "✅ Test tone playing (440Hz for 2 seconds)");
+        } else {
+            ESP_LOGE(TAG, "❌ Test tone failed: %s", esp_err_to_name(ret));
+        }
+        return ret;
     } else if (strncmp(command, "set_time ", 9) == 0) {
         // Parse time format HH:MM
         const char* time_str = command + 9;

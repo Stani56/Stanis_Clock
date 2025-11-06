@@ -1,18 +1,19 @@
 /**
  * @file audio_manager.h
- * @brief I2S Audio Manager for ESP32 Chime System
+ * @brief I2S Audio Manager for ESP32-S3 Chime System
  *
- * Manages I2S audio output to MAX98357A amplifier.
+ * Manages I2S audio output to built-in MAX98357A amplifiers.
  * Supports 16kHz, 16-bit mono PCM audio playback with DMA.
  *
- * Hardware Connections (ESP32-PICO-KIT v4.1 → MAX98357A):
- * - GPIO 32 → DIN (I2S Data)
- * - GPIO 33 → BCLK (Bit Clock)
- * - GPIO 27 → LRC (Left/Right Clock / Word Select)
- * - 3.3V → VIN (Power)
- * - GND → GND
- * - 3.3V → SD (Shutdown - always on)
- * - GAIN → Float (12dB gain, or GND for 9dB, or VIN for 15dB)
+ * Hardware Connections (ESP32-S3 YelloByte YB-ESP32-S3-AMP):
+ * - GPIO 5 → DIN (I2S Data) - Built-in connection to 2× MAX98357A
+ * - GPIO 6 → BCLK (Bit Clock) - Built-in connection
+ * - GPIO 7 → LRC (Left/Right Clock / Word Select) - Built-in connection
+ * - Power and SD (Shutdown) managed internally by YB board
+ * - GAIN configured on board (typically 12dB)
+ *
+ * Note: This is configured for ESP32-S3. For legacy ESP32-PICO-D4,
+ * use GPIO 32/33/27 (see v1.0-esp32-final tag).
  */
 
 #pragma once
@@ -35,11 +36,11 @@ extern "C" {
 #define AUDIO_DMA_BUF_LEN       256    // Samples per DMA buffer (matches Chimes_System)
 
 /**
- * @brief GPIO Pin Definitions for I2S
+ * @brief GPIO Pin Definitions for I2S (ESP32-S3 YelloByte Board)
  */
-#define I2S_GPIO_DOUT           32     // I2S Data Out (DIN on MAX98357A)
-#define I2S_GPIO_BCLK           33     // I2S Bit Clock
-#define I2S_GPIO_LRCLK          27     // I2S Left/Right Clock (Word Select)
+#define I2S_GPIO_DOUT           5      // I2S Data Out (DIN on MAX98357A) - Built-in
+#define I2S_GPIO_BCLK           6      // I2S Bit Clock - Built-in
+#define I2S_GPIO_LRCLK          7      // I2S Left/Right Clock (Word Select) - Built-in
 
 /**
  * @brief MAX98357A Amplifier Control

@@ -30,7 +30,7 @@
 #include "status_led_manager.h"
 #include "external_flash.h"
 #include "filesystem_manager.h"
-// #include "audio_manager.h"  // DISABLED: Audio causes WiFi+MQTT+I2S crashes on ESP32
+#include "audio_manager.h"  // ESP32-S3: Built-in MAX98357A on GPIO 5/6/7
 
 // Refactored modules
 #include "wordclock_display.h"
@@ -107,15 +107,18 @@ static esp_err_t initialize_hardware(void)
             ESP_LOGW(TAG, "Filesystem manager init failed - continuing without file storage");
         } else {
             ESP_LOGI(TAG, "✅ Filesystem ready at /storage");
-
-            // Audio manager initialization DISABLED for ESP32 baseline
-            // Reason: ESP32 hardware cannot handle WiFi+MQTT+I2S concurrently due to DMA conflicts
-            // - I2S audio playback causes WiFi disconnections and MQTT instability
-            // - Current workaround (disconnect MQTT before audio) is not production-ready
-            // - Audio will be re-enabled on ESP32-S3 which has improved DMA architecture
-            ESP_LOGI(TAG, "ℹ️  Audio subsystem disabled (ESP32 baseline - stable WiFi+MQTT operation)");
-            ESP_LOGI(TAG, "ℹ️  For audio support, migrate to ESP32-S3 (see docs/hardware/ESP32-S3-Migration-Analysis.md)");
         }
+    }
+
+    // Initialize audio manager (ESP32-S3 has built-in MAX98357A amplifiers)
+    ESP_LOGI(TAG, "Initializing audio manager (I2S → MAX98357A)...");
+    ret = audio_manager_init();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Audio manager init failed - continuing without audio");
+        ESP_LOGW(TAG, "Check GPIO 5/6/7 (DOUT/BCLK/LRCLK) connections to MAX98357A");
+    } else {
+        ESP_LOGI(TAG, "✅ Audio subsystem ready (16kHz, 16-bit mono PCM)");
+        ESP_LOGI(TAG, "   Use MQTT command: home/%s/audio/test_tone", MQTT_DEVICE_NAME);
     }
 
     // Initialize display system and clear all LEDs
