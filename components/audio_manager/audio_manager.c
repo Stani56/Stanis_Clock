@@ -90,13 +90,12 @@ esp_err_t audio_manager_init(void)
         return ret;
     }
 
-    // Configure I2S standard mode (MSB format for MAX98357A compatibility)
-    // MAX98357A datasheet specifies I2S or Left-Justified (MSB) format
+    // Configure I2S standard mode (Philips format - matches working ESP32 config)
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(AUDIO_SAMPLE_RATE),
-        .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(
             I2S_DATA_BIT_WIDTH_16BIT,
-            I2S_SLOT_MODE_STEREO  // Send to both L/R channels
+            I2S_SLOT_MODE_MONO  // MONO mode like working ESP32
         ),
         .gpio_cfg = {
             .mclk = I2S_GPIO_UNUSED,
@@ -183,38 +182,32 @@ esp_err_t audio_play_pcm(const int16_t *pcm_data, size_t sample_count)
 
     ESP_LOGI(TAG, "Playing %zu samples (%zu bytes)", sample_count, sample_count * 2);
 
-    // Allocate stereo buffer (duplicate mono to both channels for MAX98357A compatibility)
-    int16_t *stereo_data = malloc(sample_count * 2 * sizeof(int16_t));
-    if (stereo_data == NULL) {
-        ESP_LOGE(TAG, "Failed to allocate stereo buffer");
+    // Allocate temporary buffer for volume-scaled data (MONO like working ESP32)
+    int16_t *scaled_data = malloc(sample_count * sizeof(int16_t));
+    if (scaled_data == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate buffer for volume scaling");
         return ESP_ERR_NO_MEM;
     }
 
-    // Duplicate mono samples to stereo: [L, R, L, R, ...]
-    for (size_t i = 0; i < sample_count; i++) {
-        int16_t sample = pcm_data[i];
-        stereo_data[i * 2] = sample;      // Left channel
-        stereo_data[i * 2 + 1] = sample;  // Right channel (same as left)
-    }
-
-    // Apply volume scaling
-    apply_volume(stereo_data, sample_count * 2);
+    // Copy and apply volume
+    memcpy(scaled_data, pcm_data, sample_count * sizeof(int16_t));
+    apply_volume(scaled_data, sample_count);
 
     // Write to I2S (no WiFi power manipulation - use default like Chimes_System)
     size_t bytes_written = 0;
-    esp_err_t ret = i2s_channel_write(tx_handle, stereo_data,
-                                      sample_count * 2 * sizeof(int16_t),
+    esp_err_t ret = i2s_channel_write(tx_handle, scaled_data,
+                                      sample_count * sizeof(int16_t),
                                       &bytes_written, portMAX_DELAY);
 
-    free(stereo_data);
+    free(scaled_data);
 
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "I2S write failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    if (bytes_written != sample_count * 2 * sizeof(int16_t)) {
-        ESP_LOGW(TAG, "Incomplete write: %zu/%zu bytes", bytes_written, sample_count * 2 * 2);
+    if (bytes_written != sample_count * sizeof(int16_t)) {
+        ESP_LOGW(TAG, "Incomplete write: %zu/%zu bytes", bytes_written, sample_count * 2);
     }
 
     total_samples_played += bytes_written / sizeof(int16_t);
