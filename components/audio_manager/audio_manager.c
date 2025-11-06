@@ -90,14 +90,13 @@ esp_err_t audio_manager_init(void)
         return ret;
     }
 
-    // Configure I2S standard mode (Philips format)
-    // Use STEREO mode to send mono audio to both left and right channels
-    // This ensures MAX98357A receives data regardless of LR pin configuration
+    // Configure I2S standard mode (MSB format for MAX98357A compatibility)
+    // MAX98357A datasheet specifies I2S or Left-Justified (MSB) format
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(AUDIO_SAMPLE_RATE),
-        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(
+        .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(
             I2S_DATA_BIT_WIDTH_16BIT,
-            I2S_SLOT_MODE_STEREO  // Send to both channels for compatibility
+            I2S_SLOT_MODE_STEREO  // Send to both L/R channels
         ),
         .gpio_cfg = {
             .mclk = I2S_GPIO_UNUSED,
@@ -425,7 +424,7 @@ esp_err_t audio_play_test_tone(void)
     // Generate and play tone in chunks to save memory
     const uint32_t duration_sec = 2;
     const float frequency = 440.0f;  // Musical note A4
-    const float amplitude = 0.5f;    // 50% amplitude to avoid clipping
+    const float amplitude = 0.9f;    // 90% amplitude for maximum volume test
     const uint32_t chunk_samples = 1024;  // 1024 samples = 64ms chunks at 16kHz
     const uint32_t total_samples = AUDIO_SAMPLE_RATE * duration_sec;
     const uint32_t num_chunks = (total_samples + chunk_samples - 1) / chunk_samples;
