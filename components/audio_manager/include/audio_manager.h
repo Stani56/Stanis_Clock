@@ -36,11 +36,12 @@ extern "C" {
 #define AUDIO_DMA_BUF_LEN       256    // Samples per DMA buffer (matches Chimes_System)
 
 /**
- * @brief GPIO Pin Definitions for I2S (ESP32-S3 YelloByte Board)
+ * @brief GPIO Pin Definitions for I2S (ESP32-S3 DevKitC-1 with external MAX98357A)
+ * USER WIRING: BCLK=GPIO5, LRCK=GPIO6, DIN=GPIO7
  */
-#define I2S_GPIO_DOUT           5      // I2S Data Out (DIN on MAX98357A) - Built-in
-#define I2S_GPIO_BCLK           6      // I2S Bit Clock - Built-in
-#define I2S_GPIO_LRCLK          7      // I2S Left/Right Clock (Word Select) - Built-in
+#define I2S_GPIO_BCLK           5      // I2S Bit Clock (User wiring)
+#define I2S_GPIO_LRCLK          6      // I2S Left/Right Clock / Word Select (User wiring)
+#define I2S_GPIO_DOUT           7      // I2S Data Out → DIN on MAX98357A (User wiring)
 
 /**
  * @brief MAX98357A Amplifier Control

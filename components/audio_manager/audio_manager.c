@@ -91,6 +91,7 @@ esp_err_t audio_manager_init(void)
     }
 
     // Configure I2S standard mode (Philips format - matches working ESP32 config)
+    // GPIO pins now correctly mapped: BCLK=5, LRCLK=6, DOUT=7
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(AUDIO_SAMPLE_RATE),
         .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(
@@ -99,9 +100,9 @@ esp_err_t audio_manager_init(void)
         ),
         .gpio_cfg = {
             .mclk = I2S_GPIO_UNUSED,
-            .bclk = I2S_GPIO_BCLK,
-            .ws = I2S_GPIO_LRCLK,
-            .dout = I2S_GPIO_DOUT,
+            .bclk = I2S_GPIO_BCLK,      // Now GPIO 5 (was 6)
+            .ws = I2S_GPIO_LRCLK,       // Now GPIO 6 (was 7)
+            .dout = I2S_GPIO_DOUT,      // Now GPIO 7 (was 5)
             .din = I2S_GPIO_UNUSED,
             .invert_flags = {
                 .mclk_inv = false,
