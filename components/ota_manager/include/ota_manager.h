@@ -83,6 +83,7 @@ typedef struct {
 } ota_config_t;
 
 // Default configuration
+// GitHub URLs for production OTA updates
 #define OTA_DEFAULT_FIRMWARE_URL "https://github.com/stani56/Stanis_Clock/releases/latest/download/wordclock.bin"
 #define OTA_DEFAULT_VERSION_URL  "https://github.com/stani56/Stanis_Clock/releases/latest/download/version.json"
 #define OTA_DEFAULT_TIMEOUT_MS   120000  // 2 minutes
