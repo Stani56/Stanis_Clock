@@ -17,6 +17,7 @@
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
 #include "esp_app_format.h"
+#include "esp_crt_bundle.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -190,6 +191,43 @@ esp_err_t ota_get_current_version(firmware_version_t *version)
     return ESP_OK;
 }
 
+/**
+ * @brief Buffer for version check response
+ */
+typedef struct {
+    char *buffer;
+    int buffer_len;
+    int data_len;
+} version_check_buffer_t;
+
+/**
+ * @brief Event handler for version check HTTP client
+ */
+static esp_err_t version_check_event_handler(esp_http_client_event_t *evt)
+{
+    version_check_buffer_t *output_buffer = (version_check_buffer_t *)evt->user_data;
+
+    switch (evt->event_id) {
+    case HTTP_EVENT_ON_DATA:
+        // Copy response data to our buffer
+        if (output_buffer->buffer && evt->data_len > 0) {
+            int copy_len = evt->data_len;
+            if (output_buffer->data_len + copy_len > output_buffer->buffer_len - 1) {
+                copy_len = output_buffer->buffer_len - output_buffer->data_len - 1;
+            }
+            if (copy_len > 0) {
+                memcpy(output_buffer->buffer + output_buffer->data_len, evt->data, copy_len);
+                output_buffer->data_len += copy_len;
+                output_buffer->buffer[output_buffer->data_len] = '\0';
+            }
+        }
+        break;
+    default:
+        break;
+    }
+    return ESP_OK;
+}
+
 esp_err_t ota_check_for_updates(firmware_version_t *available_version)
 {
     if (available_version == NULL) {
@@ -204,83 +242,112 @@ esp_err_t ota_check_for_updates(firmware_version_t *available_version)
 
     update_state(OTA_STATE_CHECKING, OTA_ERROR_NONE);
 
-    // Configure HTTP client for version check
+    esp_err_t ret = ESP_FAIL;
+
+    // Allocate buffer for response (max 2KB for version.json)
+    char *buffer = malloc(2048);
+    if (!buffer) {
+        ESP_LOGE(TAG, "Failed to allocate buffer for response");
+        update_state(OTA_STATE_IDLE, OTA_ERROR_NO_INTERNET);
+        return ESP_FAIL;
+    }
+
+    // Setup buffer structure for event handler
+    version_check_buffer_t output_buffer = {
+        .buffer = buffer,
+        .buffer_len = 2048,
+        .data_len = 0
+    };
+
+    // Configure HTTP client for version check with custom event handler
+    // Use ESP-IDF's built-in certificate bundle (includes GitHub's root CA)
     esp_http_client_config_t config = {
         .url = OTA_DEFAULT_VERSION_URL,
-        .cert_pem = (char *)github_root_ca_pem_start,
-        .event_handler = http_event_handler,
+        .crt_bundle_attach = esp_crt_bundle_attach,  // Use ESP-IDF cert bundle
+        .event_handler = version_check_event_handler, // Custom handler captures data
+        .user_data = &output_buffer,                   // Pass buffer to handler
         .timeout_ms = 10000,
+        .is_async = false,
         .keep_alive_enable = true,
+        .max_redirection_count = 5,      // Follow GitHub redirects
+        .buffer_size = 2048,              // HTTP response buffer
+        .buffer_size_tx = 1024,           // HTTP request buffer
+        .disable_auto_redirect = false,   // Enable auto redirect
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (client == NULL) {
         ESP_LOGE(TAG, "Failed to initialize HTTP client");
+        free(buffer);
         update_state(OTA_STATE_IDLE, OTA_ERROR_NO_INTERNET);
         return ESP_FAIL;
     }
 
-    esp_err_t ret = ESP_FAIL;
-
-    // Perform HTTP GET
+    // Perform HTTP GET with redirect support
+    // Event handler will capture the data during HTTP_EVENT_ON_DATA
     esp_err_t err = esp_http_client_perform(client);
-    if (err == ESP_OK) {
-        int status = esp_http_client_get_status_code(client);
-        int content_length = esp_http_client_get_content_length(client);
 
-        ESP_LOGI(TAG, "HTTP GET Status = %d, content_length = %d", status, content_length);
+    int status = esp_http_client_get_status_code(client);
+    int content_length = esp_http_client_get_content_length(client);
 
-        if (status == 200 && content_length > 0 && content_length < 2048) {
-            // Read response
-            char *buffer = malloc(content_length + 1);
-            if (buffer) {
-                int read_len = esp_http_client_read(client, buffer, content_length);
-                buffer[read_len] = '\0';
+    ESP_LOGI(TAG, "HTTP GET Status = %d, content_length = %d, captured = %d bytes, err = %s",
+             status, content_length, output_buffer.data_len, esp_err_to_name(err));
 
-                // Parse JSON
-                cJSON *json = cJSON_Parse(buffer);
-                if (json) {
-                    cJSON *version_obj = cJSON_GetObjectItem(json, "version");
-                    cJSON *date_obj = cJSON_GetObjectItem(json, "build_date");
-                    cJSON *size_obj = cJSON_GetObjectItem(json, "size_bytes");
+    if (err == ESP_OK && status == 200 && output_buffer.data_len > 0) {
+        // Data was captured by event handler
+        ESP_LOGI(TAG, "Successfully received version data");
 
-                    if (version_obj && date_obj) {
-                        strncpy(available_version->version, version_obj->valuestring,
-                                sizeof(available_version->version) - 1);
-                        available_version->version[sizeof(available_version->version) - 1] = '\0';
+        // Parse JSON
+        ESP_LOGI(TAG, "Parsing JSON response (%d bytes)", output_buffer.data_len);
+        ESP_LOGD(TAG, "JSON content: %s", buffer);
 
-                        strncpy(available_version->build_date, date_obj->valuestring,
-                                sizeof(available_version->build_date) - 1);
-                        available_version->build_date[sizeof(available_version->build_date) - 1] = '\0';
+        cJSON *json = cJSON_Parse(buffer);
+        if (json) {
+            ESP_LOGI(TAG, "JSON parsed successfully");
+            cJSON *version_obj = cJSON_GetObjectItem(json, "version");
+            cJSON *date_obj = cJSON_GetObjectItem(json, "build_date");
+            cJSON *size_obj = cJSON_GetObjectItem(json, "size_bytes");
 
-                        available_version->size_bytes = size_obj ? size_obj->valueint : 0;
+            ESP_LOGI(TAG, "JSON fields: version=%p, date=%p, size=%p",
+                    version_obj, date_obj, size_obj);
 
-                        // Compare versions
-                        firmware_version_t current;
-                        ota_get_current_version(&current);
+            if (version_obj && date_obj) {
+                strncpy(available_version->version, version_obj->valuestring,
+                        sizeof(available_version->version) - 1);
+                available_version->version[sizeof(available_version->version) - 1] = '\0';
 
-                        if (strcmp(available_version->version, current.version) != 0) {
-                            ESP_LOGI(TAG, "Update available: %s → %s",
-                                    current.version, available_version->version);
-                            ret = ESP_OK;
-                        } else {
-                            ESP_LOGI(TAG, "Already running latest version: %s", current.version);
-                            ret = ESP_ERR_NOT_FOUND;
-                        }
-                    }
+                strncpy(available_version->build_date, date_obj->valuestring,
+                        sizeof(available_version->build_date) - 1);
+                available_version->build_date[sizeof(available_version->build_date) - 1] = '\0';
 
-                    cJSON_Delete(json);
+                available_version->size_bytes = size_obj ? size_obj->valueint : 0;
+
+                // Compare versions
+                firmware_version_t current;
+                ota_get_current_version(&current);
+
+                if (strcmp(available_version->version, current.version) != 0) {
+                    ESP_LOGI(TAG, "Update available: %s → %s",
+                            current.version, available_version->version);
+                    ret = ESP_OK;
+                } else {
+                    ESP_LOGI(TAG, "Already running latest version: %s", current.version);
+                    ret = ESP_ERR_NOT_FOUND;
                 }
-
-                free(buffer);
+            } else {
+                ESP_LOGE(TAG, "Missing required JSON fields (version or build_date)");
             }
+
+            cJSON_Delete(json);
         } else {
-            ESP_LOGE(TAG, "Invalid HTTP response: status=%d, length=%d", status, content_length);
+            ESP_LOGE(TAG, "JSON parsing failed");
         }
     } else {
-        ESP_LOGE(TAG, "HTTP GET failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Invalid HTTP response: err=%s, status=%d, length=%d",
+                 esp_err_to_name(err), status, content_length);
     }
 
+    free(buffer);
     esp_http_client_cleanup(client);
     update_state(OTA_STATE_IDLE, ret == ESP_OK ? OTA_ERROR_NONE : OTA_ERROR_NO_INTERNET);
 
@@ -307,12 +374,17 @@ static void ota_task(void *pvParameters)
     update_state(OTA_STATE_DOWNLOADING, OTA_ERROR_NONE);
 
     // Configure HTTPS OTA
+    // Use ESP-IDF's built-in certificate bundle (includes GitHub's root CA)
     esp_http_client_config_t http_config = {
         .url = config->firmware_url,
-        .cert_pem = (char *)github_root_ca_pem_start,
+        .crt_bundle_attach = esp_crt_bundle_attach,  // Use ESP-IDF cert bundle
         .event_handler = http_event_handler,
         .timeout_ms = config->timeout_ms,
+        .is_async = false,
+        .buffer_size = 4096,        // Larger buffer for firmware download
+        .buffer_size_tx = 1024,     // TX buffer size
         .keep_alive_enable = true,
+        .max_redirection_count = 5, // Follow GitHub redirects
     };
 
     esp_https_ota_config_t ota_config = {
