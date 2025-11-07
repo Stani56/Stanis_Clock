@@ -1,0 +1,33 @@
+# Name,   Type, SubType, Offset,  Size,    Flags
+# ESP32-S3 Word Clock - OTA-enabled partition table
+# Total flash: 16MB, OTA support with automatic rollback
+#
+# OTA Update Flow:
+# 1. Active firmware runs from factory or ota_0 partition
+# 2. New firmware downloads to inactive partition
+# 3. Boot switches to new partition after successful flash
+# 4. Health checks run on first boot
+# 5. If health checks fail, automatic rollback to previous partition
+#
+# Flash Layout:
+#   nvs      - 24KB  - Settings (WiFi, chimes, brightness, etc)
+#   otadata  - 8KB   - OTA boot state (which partition to boot from)
+#   phy_init - 4KB   - WiFi calibration data
+#   factory  - 2.5MB - Primary app partition (slot 0)
+#   ota_0    - 2.5MB - OTA app partition (slot 1)
+#
+# Total: ~5.1 MB (leaves ~11 MB unused for future expansion)
+#
+# Migration from old partition table:
+# WARNING: Requires full flash erase! Backup settings first.
+# 1. Save WiFi credentials (will be lost)
+# 2. idf.py erase-flash
+# 3. idf.py -D PARTITION_TABLE=partitions_ota.csv flash
+# 4. Reconfigure WiFi via AP mode
+# 5. Restore settings via Home Assistant
+
+nvs,      data, nvs,     0x9000,  0x6000,
+otadata,  data, ota,     0xf000,  0x2000,
+phy_init, data, phy,     0x11000, 0x1000,
+factory,  app,  factory, 0x12000, 0x280000,
+ota_0,    app,  ota_0,   0x292000,0x280000,
