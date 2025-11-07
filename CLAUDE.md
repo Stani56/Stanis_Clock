@@ -4,7 +4,7 @@
 
 **Platform:** ESP32-S3-N16R8-DevKitC-1 with external MAX98357A + microSD
 **Repository:** https://github.com/stani56/Stanis_Clock
-**Status:** Production-ready IoT word clock with Home Assistant integration + Audio system (Phase 2.1 ✅)
+**Status:** Production-ready IoT word clock with Home Assistant integration + Audio (Phase 2.1 ✅) + SD Card (Phase 2.2 ✅) + Westminster Chimes (Phase 2.3 ✅)
 **Legacy:** ESP32-PICO-D4 version available at tag `v1.0-esp32-final`
 
 ## Essential Build Information
@@ -17,7 +17,7 @@ GPIO 3     → Potentiometer (brightness control) - ADC1_CH2, WiFi safe
 GPIO 21/38 → Status LEDs (WiFi/NTP indicators) - WiFi safe
 GPIO 0     → Reset button (boot button)
 GPIO 5/6/7 → External I2S Audio (MAX98357A): BCLK=5, LRCLK=6, DIN=7 ✅ Phase 2.1 complete
-GPIO 10/11/12/13 → External microSD (SPI): CS=10, MOSI=11, CLK=12, MISO=13
+GPIO 10/11/12/13 → External microSD (SPI): CS=10, MOSI=11, CLK=12, MISO=13 ✅ Phase 2.2 complete
 ```
 
 **CRITICAL:** Avoid GPIO 2, 4, 14-17 (ADC2 channels) - Hardware conflict with WiFi!
@@ -43,7 +43,7 @@ idf.py build flash monitor
 
 ## System Architecture
 
-### Component Structure (23 Components)
+### Component Structure (25 Components)
 ```
 Hardware Layer:
 ├── i2c_devices        - TLC59116 LED controllers + DS3231 RTC
@@ -51,8 +51,11 @@ Hardware Layer:
 ├── light_sensor       - BH1750 ambient light
 ├── button_manager     - Reset button handling
 ├── status_led_manager - Network status indicators
-├── external_flash     - W25Q64 8MB SPI flash driver (OPTIONAL, for chime audio)
-└── filesystem_manager - LittleFS on external flash (OPTIONAL, Phase 1 complete ✅)
+├── audio_manager      - I2S audio output (MAX98357A amplifiers) - Phase 2.1 ✅
+├── sdcard_manager     - SD card storage (SPI mode) - Phase 2.2 ✅
+├── chime_manager      - Westminster chimes scheduler - Phase 2.3 ✅
+├── external_flash     - W25Q64 8MB SPI flash driver (OPTIONAL, archived)
+└── filesystem_manager - LittleFS on external flash (OPTIONAL, archived)
 
 Display Layer:
 ├── wordclock_display  - German word logic + LED matrix

@@ -7,6 +7,7 @@
 #include "nvs.h"
 #include <time.h>
 #include <string.h>
+#include <dirent.h>
 #include "wordclock_mqtt_control.h"
 #include "brightness_config.h"
 #include "i2c_devices.h"
@@ -19,6 +20,7 @@
 #include "../../main/thread_safety.h"  // Thread-safe network status flags
 #include "audio_manager.h"  // ESP32-S3: Built-in MAX98357A on GPIO 5/6/7
 #include "filesystem_manager.h"
+#include "chime_manager.h"  // ESP32-S3: Westminster chimes (Phase 2.3)
 
 static const char *TAG = "MQTT_MANAGER";
 
@@ -856,7 +858,7 @@ static esp_err_t mqtt_handle_command(const char* payload, int payload_len) {
             }
         }
     }
-    // Audio commands (ESP32-S3 with built-in MAX98357A)
+    // Audio commands (ESP32-S3 with external MAX98357A)
     else if (strcmp(command, "test_audio") == 0) {
         ESP_LOGI(TAG, "🔊 Audio test tone requested via MQTT");
         esp_err_t ret = audio_play_test_tone();
@@ -866,6 +868,186 @@ static esp_err_t mqtt_handle_command(const char* payload, int payload_len) {
         } else {
             mqtt_publish_status("test_audio_failed");
             ESP_LOGE(TAG, "❌ Test tone failed: %s", esp_err_to_name(ret));
+        }
+    }
+    else if (strcmp(command, "test_audio_file") == 0) {
+        ESP_LOGI(TAG, "📁 SD card audio test requested via MQTT");
+        const char *test_file = "/sdcard/test.pcm";
+        esp_err_t ret = audio_play_from_file(test_file);
+        if (ret == ESP_OK) {
+            mqtt_publish_status("test_audio_file_playing");
+            ESP_LOGI(TAG, "✅ Playing audio file: %s", test_file);
+        } else if (ret == ESP_ERR_NOT_FOUND) {
+            mqtt_publish_status("test_audio_file_not_found");
+            ESP_LOGE(TAG, "❌ Audio file not found: %s", test_file);
+            ESP_LOGI(TAG, "💡 Place a 16kHz 16-bit mono PCM file at /sdcard/test.pcm");
+        } else {
+            mqtt_publish_status("test_audio_file_failed");
+            ESP_LOGE(TAG, "❌ Audio file playback failed: %s", esp_err_to_name(ret));
+        }
+    }
+    // Westminster Chime Commands (Phase 2.3)
+    else if (strcmp(command, "chimes_enable") == 0) {
+        ESP_LOGI(TAG, "🔔 Enabling Westminster chimes");
+        esp_err_t ret = chime_manager_enable(true);
+        if (ret == ESP_OK) {
+            mqtt_publish_status("chimes_enabled");
+            ESP_LOGI(TAG, "✅ Chimes enabled");
+        } else {
+            mqtt_publish_status("chimes_enable_failed");
+            ESP_LOGE(TAG, "❌ Failed to enable chimes: %s", esp_err_to_name(ret));
+        }
+    }
+    else if (strcmp(command, "chimes_disable") == 0) {
+        ESP_LOGI(TAG, "🔕 Disabling Westminster chimes");
+        esp_err_t ret = chime_manager_enable(false);
+        if (ret == ESP_OK) {
+            mqtt_publish_status("chimes_disabled");
+            ESP_LOGI(TAG, "✅ Chimes disabled");
+        } else {
+            mqtt_publish_status("chimes_disable_failed");
+            ESP_LOGE(TAG, "❌ Failed to disable chimes: %s", esp_err_to_name(ret));
+        }
+    }
+    else if (strcmp(command, "chimes_test_strike") == 0) {
+        ESP_LOGI(TAG, "🔔 Testing single strike");
+        esp_err_t ret = chime_manager_play_test(CHIME_TEST_SINGLE);
+        if (ret == ESP_OK) {
+            mqtt_publish_status("chimes_test_playing");
+        } else {
+            mqtt_publish_status("chimes_test_failed");
+        }
+    }
+    else if (strcmp(command, "chimes_set_quiet_hours_off") == 0) {
+        ESP_LOGI(TAG, "🔕 Disabling quiet hours (setting to 0:00-0:00)");
+        esp_err_t ret = chime_manager_set_quiet_hours(0, 0);  // Same start/end = disabled
+        if (ret == ESP_OK) {
+            mqtt_publish_status("chimes_quiet_hours_disabled");
+            ESP_LOGI(TAG, "✅ Quiet hours disabled - chimes will play 24/7");
+        } else {
+            mqtt_publish_status("chimes_quiet_hours_failed");
+            ESP_LOGE(TAG, "❌ Failed to disable quiet hours");
+        }
+    }
+    else if (strcmp(command, "chimes_set_quiet_hours_default") == 0) {
+        ESP_LOGI(TAG, "🌙 Setting quiet hours to default (22:00-07:00)");
+        esp_err_t ret = chime_manager_set_quiet_hours(22, 7);
+        if (ret == ESP_OK) {
+            mqtt_publish_status("chimes_quiet_hours_set");
+            ESP_LOGI(TAG, "✅ Quiet hours set to 22:00-07:00");
+        } else {
+            mqtt_publish_status("chimes_quiet_hours_failed");
+            ESP_LOGE(TAG, "❌ Failed to set quiet hours");
+        }
+    }
+    else if (strncmp(command, "chimes_volume_", 14) == 0) {
+        // Parse volume from command: chimes_volume_50 = 50%
+        int volume = atoi(command + 14);
+        if (volume >= 0 && volume <= 100) {
+            ESP_LOGI(TAG, "🔊 Setting chime volume to %d%%", volume);
+            esp_err_t ret = chime_manager_set_volume((uint8_t)volume);
+            if (ret == ESP_OK) {
+                char status_msg[64];
+                snprintf(status_msg, sizeof(status_msg), "chime_volume_set_%d", volume);
+                mqtt_publish_status(status_msg);
+                ESP_LOGI(TAG, "✅ Chime volume set to %d%%", volume);
+            } else {
+                mqtt_publish_status("chime_volume_failed");
+                ESP_LOGE(TAG, "❌ Failed to set chime volume");
+            }
+        } else {
+            ESP_LOGE(TAG, "❌ Invalid volume: %d (must be 0-100)", volume);
+            mqtt_publish_status("chime_volume_invalid");
+        }
+    }
+    else if (strcmp(command, "chimes_get_volume") == 0) {
+        uint8_t volume = chime_manager_get_volume();
+        ESP_LOGI(TAG, "🔊 Current chime volume: %d%%", volume);
+
+        // Publish to chimes/volume topic with JSON
+        char topic[64];
+        char payload[64];
+        snprintf(topic, sizeof(topic), "home/%s/chimes/volume", MQTT_DEVICE_NAME);
+        snprintf(payload, sizeof(payload), "{\"volume\": %d}", volume);
+
+        int msg_id = esp_mqtt_client_publish(mqtt_client, topic, payload, 0, 1, false);
+        if (msg_id != -1) {
+            ESP_LOGI(TAG, "📤 Published chime volume: %d%% to %s", volume, topic);
+        } else {
+            ESP_LOGE(TAG, "❌ Failed to publish chime volume");
+        }
+    }
+    else if (strcmp(command, "list_chime_files") == 0) {
+        ESP_LOGI(TAG, "📁 Listing chime files at /sdcard/CHIMES/WESTMI~1 (8.3 format)");
+        DIR *dir = opendir("/sdcard/CHIMES/WESTMI~1");
+        if (dir) {
+            struct dirent *entry;
+            int count = 0;
+            while ((entry = readdir(dir)) != NULL) {
+                ESP_LOGI(TAG, "  📄 %s (%s)", entry->d_name,
+                        (entry->d_type == DT_DIR) ? "DIR" : "FILE");
+                count++;
+            }
+            closedir(dir);
+            ESP_LOGI(TAG, "Total files/dirs: %d", count);
+            mqtt_publish_status("chime_files_listed");
+        } else {
+            ESP_LOGE(TAG, "❌ Failed to open directory /sdcard/CHIMES/WESTMI~1");
+            mqtt_publish_status("chime_files_list_failed");
+        }
+    }
+    else if (strcmp(command, "list_sdcard") == 0) {
+        ESP_LOGI(TAG, "📁 Listing SD card root at /sdcard");
+        DIR *dir = opendir("/sdcard");
+        if (dir) {
+            struct dirent *entry;
+            int count = 0;
+            while ((entry = readdir(dir)) != NULL) {
+                ESP_LOGI(TAG, "  📄 %s (%s)", entry->d_name,
+                        (entry->d_type == DT_DIR) ? "DIR" : "FILE");
+                count++;
+            }
+            closedir(dir);
+            ESP_LOGI(TAG, "Total files/dirs in /sdcard: %d", count);
+            mqtt_publish_status("sdcard_listed");
+        } else {
+            ESP_LOGE(TAG, "❌ Failed to open directory /sdcard");
+            mqtt_publish_status("sdcard_list_failed");
+        }
+    }
+    else if (strcmp(command, "list_chimes_dir") == 0) {
+        ESP_LOGI(TAG, "📁 Listing /sdcard/CHIMES directory");
+        DIR *dir = opendir("/sdcard/CHIMES");
+        if (dir) {
+            struct dirent *entry;
+            int count = 0;
+            while ((entry = readdir(dir)) != NULL) {
+                ESP_LOGI(TAG, "  📄 %s (%s)", entry->d_name,
+                        (entry->d_type == DT_DIR) ? "DIR" : "FILE");
+
+                // If it's a directory, try to list its contents too
+                if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+                    char subdir_path[300];
+                    snprintf(subdir_path, sizeof(subdir_path), "/sdcard/CHIMES/%s", entry->d_name);
+                    DIR *subdir = opendir(subdir_path);
+                    if (subdir) {
+                        struct dirent *subentry;
+                        ESP_LOGI(TAG, "    📁 Contents of %s:", entry->d_name);
+                        while ((subentry = readdir(subdir)) != NULL) {
+                            ESP_LOGI(TAG, "      📄 %s (%s)", subentry->d_name,
+                                    (subentry->d_type == DT_DIR) ? "DIR" : "FILE");
+                        }
+                        closedir(subdir);
+                    }
+                }
+                count++;
+            }
+            closedir(dir);
+            ESP_LOGI(TAG, "Total files/dirs in /sdcard/CHIMES: %d", count);
+            mqtt_publish_status("chimes_dir_listed");
+        } else {
+            ESP_LOGE(TAG, "❌ Failed to open directory /sdcard/CHIMES");
+            mqtt_publish_status("chimes_dir_list_failed");
         }
     }
     else {

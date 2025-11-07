@@ -16,6 +16,7 @@
 #include "thread_safety.h"
 #include "audio_manager.h"  // ESP32-S3: Built-in MAX98357A on GPIO 5/6/7
 #include "filesystem_manager.h"
+#include "chime_manager.h"  // ESP32-S3: Westminster chimes (Phase 2.3)
 #include "mqtt_manager.h"
 #include "esp_log.h"
 #include <string.h>
@@ -97,6 +98,83 @@ esp_err_t mqtt_handle_basic_commands(const char* command)
         ESP_LOGW(TAG, "Invalid time format: %s (expected HH:MM)", time_str);
         return ESP_ERR_INVALID_ARG;
     }
+
+    // ============================================================================
+    // Westminster Chime Commands (Phase 2.3)
+    // ============================================================================
+    else if (strcmp(command, "chimes_enable") == 0) {
+        ESP_LOGI(TAG, "🔔 Enabling Westminster chimes");
+        esp_err_t ret = chime_manager_enable(true);
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "✅ Chimes enabled");
+        } else {
+            ESP_LOGE(TAG, "❌ Failed to enable chimes: %s", esp_err_to_name(ret));
+        }
+        return ret;
+    } else if (strcmp(command, "chimes_disable") == 0) {
+        ESP_LOGI(TAG, "🔕 Disabling Westminster chimes");
+        esp_err_t ret = chime_manager_enable(false);
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "✅ Chimes disabled");
+        } else {
+            ESP_LOGE(TAG, "❌ Failed to disable chimes: %s", esp_err_to_name(ret));
+        }
+        return ret;
+    } else if (strcmp(command, "chimes_status") == 0) {
+        bool enabled = chime_manager_is_enabled();
+        chime_config_t config;
+        if (chime_manager_get_config(&config) == ESP_OK) {
+            ESP_LOGI(TAG, "🔔 Chime Status:");
+            ESP_LOGI(TAG, "  Enabled: %s", enabled ? "YES" : "NO");
+            ESP_LOGI(TAG, "  Quiet hours: %02d:00 - %02d:00", config.quiet_start_hour, config.quiet_end_hour);
+            ESP_LOGI(TAG, "  Volume: %d%%", config.volume);
+            ESP_LOGI(TAG, "  Chime set: %s", config.chime_set);
+        }
+        return ESP_OK;
+    } else if (strcmp(command, "chimes_test_quarter") == 0) {
+        ESP_LOGI(TAG, "🔔 Testing quarter-past chime");
+        return chime_manager_play_test(CHIME_QUARTER_PAST);
+    } else if (strcmp(command, "chimes_test_half") == 0) {
+        ESP_LOGI(TAG, "🔔 Testing half-past chime");
+        return chime_manager_play_test(CHIME_HALF_PAST);
+    } else if (strcmp(command, "chimes_test_quarter_to") == 0) {
+        ESP_LOGI(TAG, "🔔 Testing quarter-to chime");
+        return chime_manager_play_test(CHIME_QUARTER_TO);
+    } else if (strcmp(command, "chimes_test_hour") == 0) {
+        ESP_LOGI(TAG, "🔔 Testing hour chime");
+        return chime_manager_play_test(CHIME_HOUR);
+    } else if (strcmp(command, "chimes_test_strike") == 0) {
+        ESP_LOGI(TAG, "🔔 Testing single strike");
+        return chime_manager_play_test(CHIME_TEST_SINGLE);
+    } else if (strncmp(command, "chimes_quiet_hours ", 19) == 0) {
+        // Parse format: chimes_quiet_hours HH:MM-HH:MM (e.g., "chimes_quiet_hours 22:00-07:00")
+        const char* hours_str = command + 19;
+        int start_hour, start_min, end_hour, end_min;
+        if (sscanf(hours_str, "%d:%d-%d:%d", &start_hour, &start_min, &end_hour, &end_min) == 4) {
+            if (start_hour >= 0 && start_hour <= 23 && end_hour >= 0 && end_hour <= 23) {
+                esp_err_t ret = chime_manager_set_quiet_hours(start_hour, end_hour);
+                if (ret == ESP_OK) {
+                    ESP_LOGI(TAG, "✅ Quiet hours set: %02d:00 - %02d:00", start_hour, end_hour);
+                } else {
+                    ESP_LOGE(TAG, "❌ Failed to set quiet hours: %s", esp_err_to_name(ret));
+                }
+                return ret;
+            }
+        }
+        ESP_LOGW(TAG, "Invalid quiet hours format: %s (expected HH:MM-HH:MM)", hours_str);
+        return ESP_ERR_INVALID_ARG;
+    } else if (strncmp(command, "chimes_set ", 11) == 0) {
+        // Format: chimes_set <set_name> (e.g., "chimes_set westminster")
+        const char* set_name = command + 11;
+        esp_err_t ret = chime_manager_set_chime_set(set_name);
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "✅ Chime set changed to: %s", set_name);
+        } else {
+            ESP_LOGE(TAG, "❌ Failed to set chime set: %s", esp_err_to_name(ret));
+        }
+        return ret;
+    }
+
     // Audio commands DISABLED (test_audio, play_audio, list_audio_files)
     // Reason: ESP32 cannot handle WiFi+MQTT+I2S concurrently
     // These will be re-enabled on ESP32-S3 hardware

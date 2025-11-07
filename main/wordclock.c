@@ -30,7 +30,9 @@
 #include "status_led_manager.h"
 #include "external_flash.h"
 #include "filesystem_manager.h"
-#include "audio_manager.h"  // ESP32-S3: Built-in MAX98357A on GPIO 5/6/7
+#include "audio_manager.h"   // ESP32-S3: External MAX98357A on GPIO 5/6/7
+#include "sdcard_manager.h"  // ESP32-S3: External SD card on GPIO 10/11/12/13
+#include "chime_manager.h"   // ESP32-S3: Westminster chimes (Phase 2.3)
 
 // Refactored modules
 #include "wordclock_display.h"
@@ -81,9 +83,18 @@ static esp_err_t ntp_manager_sync_rtc(void)
 static esp_err_t initialize_hardware(void)
 {
     ESP_LOGI(TAG, "=== INITIALIZING HARDWARE ===");
-    
+
+    // Initialize NVS FIRST - Required before any component that uses NVS storage
+    // This includes chime_manager, brightness_config, led_validation, etc.
+    ESP_LOGI(TAG, "Initializing NVS flash for configuration storage...");
+    esp_err_t ret = nvs_manager_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize NVS - configuration will not persist!");
+        // Continue anyway - system can run without NVS persistence
+    }
+
     // Initialize I2C buses and devices
-    esp_err_t ret = i2c_devices_init();
+    ret = i2c_devices_init();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize I2C devices");
         return ret;
@@ -93,6 +104,11 @@ static esp_err_t initialize_hardware(void)
     i2c_scan_bus(I2C_LEDS_MASTER_PORT);
     i2c_scan_bus(I2C_SENSORS_MASTER_PORT);
 
+    // NOTE: External flash (W25Q64) disabled for Phase 2.2 - using SD card instead
+    // The W25Q64 and SD card both use HSPI (SPI2_HOST) and share GPIO 12/13
+    // Enable external flash only if W25Q64 is physically installed and SD card is not used
+    // See Phase 1 documentation for W25Q64 details, Phase 2.2 for SD card details
+#if 0  // Disabled - using SD card for Phase 2.2
     // Initialize external flash (optional - for chime system expansion)
     ESP_LOGI(TAG, "Initializing external flash (W25Q64)...");
     ret = external_flash_init();
@@ -109,16 +125,38 @@ static esp_err_t initialize_hardware(void)
             ESP_LOGI(TAG, "✅ Filesystem ready at /storage");
         }
     }
+#endif
 
-    // Initialize audio manager (ESP32-S3 has built-in MAX98357A amplifiers)
+    // Initialize audio manager (ESP32-S3 external MAX98357A amplifier)
     ESP_LOGI(TAG, "Initializing audio manager (I2S → MAX98357A)...");
     ret = audio_manager_init();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Audio manager init failed - continuing without audio");
-        ESP_LOGW(TAG, "Check GPIO 5/6/7 (DOUT/BCLK/LRCLK) connections to MAX98357A");
+        ESP_LOGW(TAG, "Check GPIO 5/6/7 (BCLK/LRCLK/DIN) connections to MAX98357A");
     } else {
         ESP_LOGI(TAG, "✅ Audio subsystem ready (16kHz, 16-bit mono PCM)");
-        ESP_LOGI(TAG, "   Use MQTT command: home/%s/audio/test_tone", MQTT_DEVICE_NAME);
+        ESP_LOGI(TAG, "   GPIO 5=BCLK, 6=LRCLK, 7=DIN → MAX98357A");
+    }
+
+    // Initialize SD card for audio file storage (ESP32-S3 external SD card)
+    ESP_LOGI(TAG, "Initializing SD card (SPI → microSD)...");
+    ret = sdcard_manager_init();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "SD card init failed - continuing without SD card storage");
+        ESP_LOGW(TAG, "Check GPIO 10/11/12/13 (CS/MOSI/CLK/MISO) and SD card insertion");
+    } else {
+        ESP_LOGI(TAG, "✅ SD card mounted at /sdcard");
+        ESP_LOGI(TAG, "   GPIO 10=CS, 11=MOSI, 12=CLK, 13=MISO");
+    }
+
+    // Initialize Westminster chime manager (Phase 2.3)
+    ESP_LOGI(TAG, "Initializing Westminster chime manager...");
+    ret = chime_manager_init();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Chime manager init failed - continuing without chimes");
+    } else {
+        ESP_LOGI(TAG, "✅ Chime manager initialized (disabled by default)");
+        ESP_LOGI(TAG, "   Enable via MQTT: home/Clock_Stani_1/chimes/enable");
     }
 
     // Initialize display system and clear all LEDs
@@ -178,16 +216,11 @@ static esp_err_t initialize_hardware(void)
 static esp_err_t initialize_network(void)
 {
     ESP_LOGI(TAG, "=== INITIALIZING NETWORK ===");
-    
-    // Initialize NVS for configuration storage
-    esp_err_t ret = nvs_manager_init();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to initialize NVS");
-        return ret;
-    }
-    
+
+    // NOTE: NVS is now initialized in initialize_hardware() before any components need it
+
     // Initialize brightness configuration
-    ret = brightness_config_init();
+    esp_err_t ret = brightness_config_init();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Failed to init brightness config - using defaults");
     }
@@ -387,6 +420,9 @@ static void test_live_word_clock(void)
             // Update previous time
             previous_time = current_time;
             first_loop = false;
+
+            // Check for Westminster chime triggers (Phase 2.3)
+            chime_manager_check_time();
 
             // Log time occasionally
             if (loop_count % 20 == 0) {
