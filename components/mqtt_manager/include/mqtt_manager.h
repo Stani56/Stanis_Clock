@@ -96,6 +96,8 @@ esp_err_t mqtt_publish_brightness_status(uint8_t individual, uint8_t global);
 esp_err_t mqtt_publish_brightness_config_status(void);
 esp_err_t mqtt_publish_chime_status(void);  // Phase 2.3: Westminster chimes
 esp_err_t mqtt_publish_chime_volume(void);  // Phase 2.3: Westminster chimes
+esp_err_t mqtt_publish_ota_version(void);   // Phase 2.4: OTA firmware updates
+esp_err_t mqtt_publish_ota_progress(void);  // Phase 2.4: OTA firmware updates
 esp_err_t mqtt_publish_sensor_status(void);
 esp_err_t mqtt_publish_ntp_last_sync(void);
 esp_err_t mqtt_publish_heartbeat_with_ntp(void);

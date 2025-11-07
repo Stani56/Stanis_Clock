@@ -21,6 +21,7 @@
 #include "audio_manager.h"  // ESP32-S3: Built-in MAX98357A on GPIO 5/6/7
 #include "filesystem_manager.h"
 #include "chime_manager.h"  // ESP32-S3: Westminster chimes (Phase 2.3)
+#include "ota_manager.h"    // ESP32-S3: OTA firmware updates (Phase 2.4)
 
 static const char *TAG = "MQTT_MANAGER";
 
@@ -1056,6 +1057,67 @@ static esp_err_t mqtt_handle_command(const char* payload, int payload_len) {
             ESP_LOGE(TAG, "❌ Failed to open directory /sdcard/CHIMES");
             mqtt_publish_status("chimes_dir_list_failed");
         }
+    }
+    // OTA Update Commands (Phase 2.4)
+    else if (strcmp(command, "ota_check_update") == 0) {
+        ESP_LOGI(TAG, "🔄 Checking for firmware updates...");
+
+        firmware_version_t available;
+        esp_err_t ret = ota_check_for_updates(&available);
+
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "✅ Update available: %s", available.version);
+            mqtt_publish_status("ota_update_available");
+            mqtt_publish_ota_version();  // Publish version info
+        } else if (ret == ESP_ERR_NOT_FOUND) {
+            ESP_LOGI(TAG, "✅ Already running latest version");
+            mqtt_publish_status("ota_up_to_date");
+            mqtt_publish_ota_version();  // Publish current version
+        } else {
+            ESP_LOGE(TAG, "❌ Failed to check for updates: %s", esp_err_to_name(ret));
+            mqtt_publish_status("ota_check_failed");
+        }
+    }
+    else if (strcmp(command, "ota_start_update") == 0) {
+        ESP_LOGI(TAG, "🚀 Starting OTA firmware update...");
+
+        esp_err_t ret = ota_start_update_default();
+
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "✅ OTA update started");
+            mqtt_publish_status("ota_update_started");
+            mqtt_publish_ota_progress();  // Initial progress
+        } else if (ret == ESP_ERR_INVALID_STATE) {
+            ESP_LOGW(TAG, "⚠️ OTA update already in progress");
+            mqtt_publish_status("ota_already_running");
+        } else if (ret == ESP_ERR_NOT_FOUND) {
+            ESP_LOGI(TAG, "✅ Already running latest version");
+            mqtt_publish_status("ota_up_to_date");
+        } else {
+            ESP_LOGE(TAG, "❌ Failed to start OTA update: %s", esp_err_to_name(ret));
+            mqtt_publish_status("ota_start_failed");
+        }
+    }
+    else if (strcmp(command, "ota_cancel_update") == 0) {
+        ESP_LOGI(TAG, "⛔ Cancelling OTA update...");
+
+        esp_err_t ret = ota_cancel_update();
+
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "✅ OTA update cancelled");
+            mqtt_publish_status("ota_cancelled");
+        } else {
+            ESP_LOGW(TAG, "⚠️ No OTA update to cancel or cannot cancel at this stage");
+            mqtt_publish_status("ota_cancel_failed");
+        }
+    }
+    else if (strcmp(command, "ota_get_progress") == 0) {
+        ESP_LOGI(TAG, "📊 Getting OTA progress...");
+        mqtt_publish_ota_progress();
+    }
+    else if (strcmp(command, "ota_get_version") == 0) {
+        ESP_LOGI(TAG, "ℹ️ Getting firmware version info...");
+        mqtt_publish_ota_version();
     }
     else {
         ESP_LOGW(TAG, "Unknown command: '%s'", command);
@@ -2240,6 +2302,138 @@ esp_err_t mqtt_publish_chime_volume(void) {
         ESP_LOGI(TAG, "📤 Published chime volume: %d%%", volume);
     }
     return (msg_id != -1) ? ESP_OK : ESP_FAIL;
+}
+
+/**
+ * @brief Publish OTA firmware version info to MQTT
+ *
+ * Publishes to topic: home/[DEVICE_NAME]/ota/version
+ * Format: {"current": "v2.3.1", "available": "v2.3.2", "update_available": true, ...}
+ */
+esp_err_t mqtt_publish_ota_version(void) {
+    if (!thread_safe_get_mqtt_connected()) return ESP_ERR_INVALID_STATE;
+
+    // Get current version
+    firmware_version_t current;
+    esp_err_t ret = ota_get_current_version(&current);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get current firmware version");
+        return ESP_FAIL;
+    }
+
+    // Check for available update
+    firmware_version_t available;
+    bool update_available = false;
+    ret = ota_check_for_updates(&available);
+    if (ret == ESP_OK) {
+        update_available = true;
+    } else {
+        // If check fails, use current version as available
+        available = current;
+    }
+
+    // Build JSON payload
+    cJSON *json = cJSON_CreateObject();
+    if (json == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    cJSON_AddStringToObject(json, "current_version", current.version);
+    cJSON_AddStringToObject(json, "current_build_date", current.build_date);
+    cJSON_AddStringToObject(json, "current_idf_version", current.idf_version);
+    cJSON_AddNumberToObject(json, "current_size_bytes", current.size_bytes);
+
+    if (update_available) {
+        cJSON_AddStringToObject(json, "available_version", available.version);
+        cJSON_AddStringToObject(json, "available_build_date", available.build_date);
+        cJSON_AddNumberToObject(json, "available_size_bytes", available.size_bytes);
+    }
+
+    cJSON_AddBoolToObject(json, "update_available", update_available);
+    cJSON_AddStringToObject(json, "running_partition", ota_get_running_partition_name());
+
+    char *json_string = cJSON_PrintUnformatted(json);
+    if (json_string) {
+        char topic[128];
+        snprintf(topic, sizeof(topic), "home/%s/ota/version", MQTT_DEVICE_NAME);
+
+        int msg_id = esp_mqtt_client_publish(mqtt_client, topic, json_string, 0, 1, true);
+        if (msg_id != -1) {
+            ESP_LOGI(TAG, "📤 Published OTA version info");
+        }
+        cJSON_free(json_string);
+
+        cJSON_Delete(json);
+        return (msg_id != -1) ? ESP_OK : ESP_FAIL;
+    }
+
+    cJSON_Delete(json);
+    return ESP_FAIL;
+}
+
+/**
+ * @brief Publish OTA update progress to MQTT
+ *
+ * Publishes to topic: home/[DEVICE_NAME]/ota/progress
+ * Format: {"state": "downloading", "progress": 45, "bytes_downloaded": 524288, ...}
+ */
+esp_err_t mqtt_publish_ota_progress(void) {
+    if (!thread_safe_get_mqtt_connected()) return ESP_ERR_INVALID_STATE;
+
+    // Get current progress
+    ota_progress_t progress;
+    esp_err_t ret = ota_get_progress(&progress);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get OTA progress");
+        return ESP_FAIL;
+    }
+
+    // Build JSON payload
+    cJSON *json = cJSON_CreateObject();
+    if (json == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    // Map state to string
+    const char *state_str = "idle";
+    switch (progress.state) {
+        case OTA_STATE_IDLE:        state_str = "idle"; break;
+        case OTA_STATE_CHECKING:    state_str = "checking"; break;
+        case OTA_STATE_DOWNLOADING: state_str = "downloading"; break;
+        case OTA_STATE_VERIFYING:   state_str = "verifying"; break;
+        case OTA_STATE_FLASHING:    state_str = "flashing"; break;
+        case OTA_STATE_COMPLETE:    state_str = "complete"; break;
+        case OTA_STATE_FAILED:      state_str = "failed"; break;
+    }
+
+    cJSON_AddStringToObject(json, "state", state_str);
+    cJSON_AddNumberToObject(json, "progress_percent", progress.progress_percent);
+    cJSON_AddNumberToObject(json, "bytes_downloaded", progress.bytes_downloaded);
+    cJSON_AddNumberToObject(json, "total_bytes", progress.total_bytes);
+    cJSON_AddNumberToObject(json, "time_elapsed_ms", progress.time_elapsed_ms);
+    cJSON_AddNumberToObject(json, "time_remaining_ms", progress.time_remaining_ms);
+
+    if (progress.state == OTA_STATE_FAILED) {
+        cJSON_AddStringToObject(json, "error", ota_error_to_string(progress.error));
+    }
+
+    char *json_string = cJSON_PrintUnformatted(json);
+    if (json_string) {
+        char topic[128];
+        snprintf(topic, sizeof(topic), "home/%s/ota/progress", MQTT_DEVICE_NAME);
+
+        int msg_id = esp_mqtt_client_publish(mqtt_client, topic, json_string, 0, 1, false);
+        if (msg_id != -1) {
+            ESP_LOGD(TAG, "📤 Published OTA progress: %s (%d%%)", state_str, progress.progress_percent);
+        }
+        cJSON_free(json_string);
+
+        cJSON_Delete(json);
+        return (msg_id != -1) ? ESP_OK : ESP_FAIL;
+    }
+
+    cJSON_Delete(json);
+    return ESP_FAIL;
 }
 
 esp_err_t mqtt_publish_brightness_config_status(void) {
