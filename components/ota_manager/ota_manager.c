@@ -401,6 +401,32 @@ static void ota_task(void *pvParameters)
         return;
     }
 
+    // Get and verify app descriptor BEFORE downloading
+    // This must be done after begin() but before perform() loop
+    esp_app_desc_t new_app_info;
+    ret = esp_https_ota_get_img_desc(https_ota_handle, &new_app_info);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "❌ Could not get app description: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "   This usually means incomplete headers or redirect issues");
+        esp_https_ota_abort(https_ota_handle);
+        update_state(OTA_STATE_FAILED, OTA_ERROR_DOWNLOAD_FAILED);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    // Verify magic word
+    if (new_app_info.magic_word != ESP_APP_DESC_MAGIC_WORD) {
+        ESP_LOGE(TAG, "❌ Invalid magic word in new firmware: 0x%08lx", new_app_info.magic_word);
+        esp_https_ota_abort(https_ota_handle);
+        update_state(OTA_STATE_FAILED, OTA_ERROR_CHECKSUM_MISMATCH);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    ESP_LOGI(TAG, "✅ App descriptor validated");
+    ESP_LOGI(TAG, "   New firmware version: %s", new_app_info.version);
+    ESP_LOGI(TAG, "   Build date: %s %s", new_app_info.date, new_app_info.time);
+
     ESP_LOGI(TAG, "📥 Downloading firmware...");
 
     // Download and flash in chunks
@@ -445,7 +471,7 @@ static void ota_task(void *pvParameters)
     ESP_LOGI(TAG, "✅ Download complete, verifying image...");
     update_state(OTA_STATE_VERIFYING, OTA_ERROR_NONE);
 
-    // Verify image
+    // Verify complete data received
     if (esp_https_ota_is_complete_data_received(https_ota_handle) != true) {
         ESP_LOGE(TAG, "❌ Complete data not received");
         esp_https_ota_abort(https_ota_handle);
@@ -454,29 +480,7 @@ static void ota_task(void *pvParameters)
         return;
     }
 
-    // Get image length to verify complete download
-    esp_app_desc_t new_app_info;
-    if (esp_https_ota_get_img_desc(https_ota_handle, &new_app_info) != ESP_OK) {
-        ESP_LOGE(TAG, "❌ Could not get app description");
-        esp_https_ota_abort(https_ota_handle);
-        update_state(OTA_STATE_FAILED, OTA_ERROR_NO_UPDATE_PARTITION);
-        vTaskDelete(NULL);
-        return;
-    }
-
-    ESP_LOGI(TAG, "New firmware version: %s", new_app_info.version);
-    ESP_LOGI(TAG, "Build date: %s %s", new_app_info.date, new_app_info.time);
-
-    // Verify magic word
-    if (new_app_info.magic_word != ESP_APP_DESC_MAGIC_WORD) {
-        ESP_LOGE(TAG, "❌ Invalid magic word in new firmware");
-        esp_https_ota_abort(https_ota_handle);
-        update_state(OTA_STATE_FAILED, OTA_ERROR_CHECKSUM_MISMATCH);
-        vTaskDelete(NULL);
-        return;
-    }
-
-    ESP_LOGI(TAG, "✅ Image validation passed");
+    ESP_LOGI(TAG, "✅ Image validation passed (already checked app descriptor)");
     update_state(OTA_STATE_FLASHING, OTA_ERROR_NONE);
 
     // Finish OTA (this sets boot partition)
