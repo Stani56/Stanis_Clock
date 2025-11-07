@@ -94,6 +94,8 @@ esp_err_t mqtt_publish_availability(bool online);
 esp_err_t mqtt_publish_transition_status(uint16_t duration_ms, bool enabled);
 esp_err_t mqtt_publish_brightness_status(uint8_t individual, uint8_t global);
 esp_err_t mqtt_publish_brightness_config_status(void);
+esp_err_t mqtt_publish_chime_status(void);  // Phase 2.3: Westminster chimes
+esp_err_t mqtt_publish_chime_volume(void);  // Phase 2.3: Westminster chimes
 esp_err_t mqtt_publish_sensor_status(void);
 esp_err_t mqtt_publish_ntp_last_sync(void);
 esp_err_t mqtt_publish_heartbeat_with_ntp(void);

@@ -63,6 +63,7 @@ esp_err_t mqtt_discovery_publish_numbers(void);
 esp_err_t mqtt_discovery_publish_selects(void);
 esp_err_t mqtt_discovery_publish_buttons(void);
 esp_err_t mqtt_discovery_publish_brightness_config(void);
+esp_err_t mqtt_discovery_publish_chime_controls(void);
 
 // Helper functions
 esp_err_t mqtt_discovery_generate_device_id(char* device_id, size_t len);

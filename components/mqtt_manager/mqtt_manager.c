@@ -366,6 +366,10 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event
             mqtt_publish_transition_status(transition_duration_ms, transition_system_enabled);
             mqtt_publish_brightness_status(potentiometer_individual, global_brightness);
 
+            // Publish initial chime status and volume (Phase 2.3)
+            mqtt_publish_chime_status();
+            mqtt_publish_chime_volume();
+
             // Publish initial error log statistics
             extern esp_err_t handle_error_log_stats_request(void);
             handle_error_log_stats_request();
@@ -892,6 +896,7 @@ static esp_err_t mqtt_handle_command(const char* payload, int payload_len) {
         esp_err_t ret = chime_manager_enable(true);
         if (ret == ESP_OK) {
             mqtt_publish_status("chimes_enabled");
+            mqtt_publish_chime_status();  // Update Home Assistant
             ESP_LOGI(TAG, "✅ Chimes enabled");
         } else {
             mqtt_publish_status("chimes_enable_failed");
@@ -903,6 +908,7 @@ static esp_err_t mqtt_handle_command(const char* payload, int payload_len) {
         esp_err_t ret = chime_manager_enable(false);
         if (ret == ESP_OK) {
             mqtt_publish_status("chimes_disabled");
+            mqtt_publish_chime_status();  // Update Home Assistant
             ESP_LOGI(TAG, "✅ Chimes disabled");
         } else {
             mqtt_publish_status("chimes_disable_failed");
@@ -950,6 +956,7 @@ static esp_err_t mqtt_handle_command(const char* payload, int payload_len) {
                 char status_msg[64];
                 snprintf(status_msg, sizeof(status_msg), "chime_volume_set_%d", volume);
                 mqtt_publish_status(status_msg);
+                mqtt_publish_chime_volume();  // Update Home Assistant
                 ESP_LOGI(TAG, "✅ Chime volume set to %d%%", volume);
             } else {
                 mqtt_publish_status("chime_volume_failed");
@@ -2181,6 +2188,56 @@ esp_err_t mqtt_publish_brightness_status(uint8_t individual, uint8_t global) {
     int msg_id = esp_mqtt_client_publish(mqtt_client, MQTT_TOPIC_BRIGHTNESS_STATUS, payload, 0, 1, true);
     if (msg_id != -1) {
         ESP_LOGI(TAG, "📤 Published brightness status: %s", payload);
+    }
+    return (msg_id != -1) ? ESP_OK : ESP_FAIL;
+}
+
+/**
+ * @brief Publish chime status (enabled/disabled) to MQTT
+ *
+ * Publishes to topic: home/[DEVICE_NAME]/chimes/status
+ * Format: {"enabled": true/false}
+ */
+esp_err_t mqtt_publish_chime_status(void) {
+    if (!thread_safe_get_mqtt_connected()) return ESP_ERR_INVALID_STATE;
+
+    // Get current chime enabled state from chime_manager
+    extern bool chime_manager_is_enabled(void);
+    bool enabled = chime_manager_is_enabled();
+
+    char topic[128];
+    char payload[64];
+    snprintf(topic, sizeof(topic), "home/%s/chimes/status", MQTT_DEVICE_NAME);
+    snprintf(payload, sizeof(payload), "{\"enabled\":%s}", enabled ? "true" : "false");
+
+    int msg_id = esp_mqtt_client_publish(mqtt_client, topic, payload, 0, 1, true);
+    if (msg_id != -1) {
+        ESP_LOGI(TAG, "📤 Published chime status: %s", payload);
+    }
+    return (msg_id != -1) ? ESP_OK : ESP_FAIL;
+}
+
+/**
+ * @brief Publish chime volume to MQTT
+ *
+ * Publishes to topic: home/[DEVICE_NAME]/chimes/volume
+ * Format: {"volume": 0-100}
+ */
+esp_err_t mqtt_publish_chime_volume(void) {
+    if (!thread_safe_get_mqtt_connected()) return ESP_ERR_INVALID_STATE;
+
+    // Get current volume from chime_manager
+    extern uint8_t chime_manager_get_volume(void);
+    uint8_t volume = chime_manager_get_volume();
+
+    char topic[128];
+    char payload[64];
+    snprintf(topic, sizeof(topic), "home/%s/chimes/volume", MQTT_DEVICE_NAME);
+    snprintf(payload, sizeof(payload), "{\"volume\":%d}", volume);
+
+    int msg_id = esp_mqtt_client_publish(mqtt_client, topic, payload, 0, 1, true);
+    if (msg_id != -1) {
+        ESP_LOGI(TAG, "📤 Published chime volume: %d%%", volume);
     }
     return (msg_id != -1) ? ESP_OK : ESP_FAIL;
 }

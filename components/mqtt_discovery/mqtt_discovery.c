@@ -1186,6 +1186,107 @@ esp_err_t mqtt_discovery_publish_brightness_config(void)
     return ret;
 }
 
+/**
+ * @brief Publish Home Assistant discovery for Westminster chime controls
+ *
+ * Creates three entities in Home Assistant:
+ * 1. Switch: Enable/Disable chimes
+ * 2. Number: Volume control (0-100%)
+ * 3. Sensor: Chime status (enabled/disabled)
+ */
+esp_err_t mqtt_discovery_publish_chime_controls(void)
+{
+    esp_err_t ret = ESP_OK;
+    char unique_id[64];
+
+    // ===== CHIME ENABLE/DISABLE SWITCH =====
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config == NULL) return ESP_ERR_NO_MEM;
+
+        add_base_topic(config);
+        cJSON_AddStringToObject(config, "name", "Westminster Chimes");
+        snprintf(unique_id, sizeof(unique_id), "%s_chimes_enabled", discovery_config.device_id);
+        cJSON_AddStringToObject(config, "unique_id", unique_id);
+        cJSON_AddStringToObject(config, "state_topic", "~/chimes/status");
+        cJSON_AddStringToObject(config, "command_topic", "~/command");
+        cJSON_AddStringToObject(config, "value_template", "{{ value_json.enabled }}");
+        cJSON_AddStringToObject(config, "payload_on", "chimes_enable");
+        cJSON_AddStringToObject(config, "payload_off", "chimes_disable");
+        cJSON_AddBoolToObject(config, "state_on", true);
+        cJSON_AddBoolToObject(config, "state_off", false);
+        cJSON_AddStringToObject(config, "icon", "mdi:bell-ring");
+        cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+        cJSON *device = create_device_json();
+        if (device) cJSON_AddItemToObject(config, "device", device);
+
+        ret = publish_discovery_config("switch", "chimes_enabled", config, true);
+        cJSON_Delete(config);
+        if (ret != ESP_OK) return ret;
+
+        vTaskDelay(pdMS_TO_TICKS(DISCOVERY_PUBLISH_DELAY_MS));
+    }
+
+    // ===== CHIME VOLUME NUMBER =====
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config == NULL) return ESP_ERR_NO_MEM;
+
+        add_base_topic(config);
+        cJSON_AddStringToObject(config, "name", "Chime Volume");
+        snprintf(unique_id, sizeof(unique_id), "%s_chime_volume", discovery_config.device_id);
+        cJSON_AddStringToObject(config, "unique_id", unique_id);
+        cJSON_AddStringToObject(config, "state_topic", "~/chimes/volume");
+        cJSON_AddStringToObject(config, "command_topic", "~/command");
+        cJSON_AddStringToObject(config, "value_template", "{{ value_json.volume }}");
+        cJSON_AddStringToObject(config, "command_template", "chimes_volume_{{ value | int }}");
+
+        cJSON_AddNumberToObject(config, "min", 0);
+        cJSON_AddNumberToObject(config, "max", 100);
+        cJSON_AddNumberToObject(config, "step", 5);
+        cJSON_AddStringToObject(config, "unit_of_measurement", "%");
+        cJSON_AddStringToObject(config, "icon", "mdi:volume-high");
+        cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+        cJSON *device = create_device_json();
+        if (device) cJSON_AddItemToObject(config, "device", device);
+
+        ret = publish_discovery_config("number", "chime_volume", config, true);
+        cJSON_Delete(config);
+        if (ret != ESP_OK) return ret;
+
+        vTaskDelay(pdMS_TO_TICKS(DISCOVERY_PUBLISH_DELAY_MS));
+    }
+
+    // ===== CHIME STATUS SENSOR =====
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config == NULL) return ESP_ERR_NO_MEM;
+
+        add_base_topic(config);
+        cJSON_AddStringToObject(config, "name", "Chime Status");
+        snprintf(unique_id, sizeof(unique_id), "%s_chime_status", discovery_config.device_id);
+        cJSON_AddStringToObject(config, "unique_id", unique_id);
+        cJSON_AddStringToObject(config, "state_topic", "~/chimes/status");
+        cJSON_AddStringToObject(config, "value_template", "{{ 'Enabled' if value_json.enabled else 'Disabled' }}");
+        cJSON_AddStringToObject(config, "icon", "mdi:bell");
+        cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+        cJSON *device = create_device_json();
+        if (device) cJSON_AddItemToObject(config, "device", device);
+
+        ret = publish_discovery_config("sensor", "chime_status", config, true);
+        cJSON_Delete(config);
+        if (ret != ESP_OK) return ret;
+
+        vTaskDelay(pdMS_TO_TICKS(DISCOVERY_PUBLISH_DELAY_MS));
+    }
+
+    ESP_LOGI(TAG, "✅ Published chime control entities (switch, volume, status)");
+    return ret;
+}
+
 // Start discovery with MQTT client
 esp_err_t mqtt_discovery_start(esp_mqtt_client_handle_t client)
 {
@@ -1348,7 +1449,14 @@ esp_err_t mqtt_discovery_publish_all(void)
         ESP_LOGE(TAG, "Failed to publish brightness config discoveries");
         return ret;
     }
-    
+
+    // Publish chime control entities (Phase 2.3)
+    ret = mqtt_discovery_publish_chime_controls();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to publish chime control discoveries");
+        return ret;
+    }
+
     ESP_LOGI(TAG, "✅ All discovery configurations published successfully");
     return ESP_OK;
 }
