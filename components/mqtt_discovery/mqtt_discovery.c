@@ -1187,6 +1187,252 @@ esp_err_t mqtt_discovery_publish_brightness_config(void)
 }
 
 /**
+ * @brief Publish Home Assistant discovery for OTA firmware update controls
+ *
+ * Creates multiple entities in Home Assistant:
+ * 1. Sensor: Current firmware version
+ * 2. Sensor: Update status (checking, downloading, flashing, etc.)
+ * 3. Sensor: Download progress (percentage)
+ * 4. Button: Check for updates
+ * 5. Button: Start OTA update
+ * 6. Button: Cancel update
+ * 7. Sensor: Update available (binary)
+ */
+esp_err_t mqtt_discovery_publish_ota_controls(void)
+{
+    esp_err_t ret = ESP_OK;
+    char unique_id[64];
+
+    // ===== CURRENT FIRMWARE VERSION SENSOR =====
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config == NULL) return ESP_ERR_NO_MEM;
+
+        add_base_topic(config);
+        cJSON_AddStringToObject(config, "name", "Firmware Version");
+        snprintf(unique_id, sizeof(unique_id), "%s_firmware_version", discovery_config.device_id);
+        cJSON_AddStringToObject(config, "unique_id", unique_id);
+        cJSON_AddStringToObject(config, "state_topic", "~/ota/version");
+        cJSON_AddStringToObject(config, "value_template", "{{ value_json.current_version }}");
+        cJSON_AddStringToObject(config, "icon", "mdi:chip");
+        cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+        cJSON_AddStringToObject(config, "entity_category", "diagnostic");
+
+        cJSON *device = create_device_json();
+        if (device) cJSON_AddItemToObject(config, "device", device);
+
+        ret = publish_discovery_config("sensor", "firmware_version", config, true);
+        cJSON_Delete(config);
+        if (ret != ESP_OK) return ret;
+
+        vTaskDelay(pdMS_TO_TICKS(DISCOVERY_PUBLISH_DELAY_MS));
+    }
+
+    // ===== FIRMWARE BUILD DATE SENSOR =====
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config == NULL) return ESP_ERR_NO_MEM;
+
+        add_base_topic(config);
+        cJSON_AddStringToObject(config, "name", "Firmware Build Date");
+        snprintf(unique_id, sizeof(unique_id), "%s_firmware_build_date", discovery_config.device_id);
+        cJSON_AddStringToObject(config, "unique_id", unique_id);
+        cJSON_AddStringToObject(config, "state_topic", "~/ota/version");
+        cJSON_AddStringToObject(config, "value_template", "{{ value_json.current_build_date }}");
+        cJSON_AddStringToObject(config, "icon", "mdi:calendar-clock");
+        cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+        cJSON_AddStringToObject(config, "entity_category", "diagnostic");
+
+        cJSON *device = create_device_json();
+        if (device) cJSON_AddItemToObject(config, "device", device);
+
+        ret = publish_discovery_config("sensor", "firmware_build_date", config, true);
+        cJSON_Delete(config);
+        if (ret != ESP_OK) return ret;
+
+        vTaskDelay(pdMS_TO_TICKS(DISCOVERY_PUBLISH_DELAY_MS));
+    }
+
+    // ===== UPDATE STATUS SENSOR =====
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config == NULL) return ESP_ERR_NO_MEM;
+
+        add_base_topic(config);
+        cJSON_AddStringToObject(config, "name", "OTA Update Status");
+        snprintf(unique_id, sizeof(unique_id), "%s_ota_status", discovery_config.device_id);
+        cJSON_AddStringToObject(config, "unique_id", unique_id);
+        cJSON_AddStringToObject(config, "state_topic", "~/ota/progress");
+        cJSON_AddStringToObject(config, "value_template", "{{ value_json.state }}");
+        cJSON_AddStringToObject(config, "icon", "mdi:update");
+        cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+        cJSON *device = create_device_json();
+        if (device) cJSON_AddItemToObject(config, "device", device);
+
+        ret = publish_discovery_config("sensor", "ota_status", config, true);
+        cJSON_Delete(config);
+        if (ret != ESP_OK) return ret;
+
+        vTaskDelay(pdMS_TO_TICKS(DISCOVERY_PUBLISH_DELAY_MS));
+    }
+
+    // ===== DOWNLOAD PROGRESS SENSOR =====
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config == NULL) return ESP_ERR_NO_MEM;
+
+        add_base_topic(config);
+        cJSON_AddStringToObject(config, "name", "OTA Download Progress");
+        snprintf(unique_id, sizeof(unique_id), "%s_ota_progress", discovery_config.device_id);
+        cJSON_AddStringToObject(config, "unique_id", unique_id);
+        cJSON_AddStringToObject(config, "state_topic", "~/ota/progress");
+        cJSON_AddStringToObject(config, "unit_of_measurement", "%");
+        cJSON_AddStringToObject(config, "value_template", "{{ value_json.progress_percent }}");
+        cJSON_AddStringToObject(config, "icon", "mdi:progress-download");
+        cJSON_AddStringToObject(config, "state_class", "measurement");
+        cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+        cJSON *device = create_device_json();
+        if (device) cJSON_AddItemToObject(config, "device", device);
+
+        ret = publish_discovery_config("sensor", "ota_progress", config, true);
+        cJSON_Delete(config);
+        if (ret != ESP_OK) return ret;
+
+        vTaskDelay(pdMS_TO_TICKS(DISCOVERY_PUBLISH_DELAY_MS));
+    }
+
+    // ===== UPDATE AVAILABLE BINARY SENSOR =====
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config == NULL) return ESP_ERR_NO_MEM;
+
+        add_base_topic(config);
+        cJSON_AddStringToObject(config, "name", "Update Available");
+        snprintf(unique_id, sizeof(unique_id), "%s_update_available", discovery_config.device_id);
+        cJSON_AddStringToObject(config, "unique_id", unique_id);
+        cJSON_AddStringToObject(config, "state_topic", "~/ota/version");
+        cJSON_AddStringToObject(config, "value_template", "{{ 'ON' if value_json.update_available else 'OFF' }}");
+        cJSON_AddStringToObject(config, "payload_on", "ON");
+        cJSON_AddStringToObject(config, "payload_off", "OFF");
+        cJSON_AddStringToObject(config, "device_class", "update");
+        cJSON_AddStringToObject(config, "icon", "mdi:package-down");
+        cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+        cJSON *device = create_device_json();
+        if (device) cJSON_AddItemToObject(config, "device", device);
+
+        ret = publish_discovery_config("binary_sensor", "update_available", config, true);
+        cJSON_Delete(config);
+        if (ret != ESP_OK) return ret;
+
+        vTaskDelay(pdMS_TO_TICKS(DISCOVERY_PUBLISH_DELAY_MS));
+    }
+
+    // ===== RUNNING PARTITION SENSOR =====
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config == NULL) return ESP_ERR_NO_MEM;
+
+        add_base_topic(config);
+        cJSON_AddStringToObject(config, "name", "Running Partition");
+        snprintf(unique_id, sizeof(unique_id), "%s_running_partition", discovery_config.device_id);
+        cJSON_AddStringToObject(config, "unique_id", unique_id);
+        cJSON_AddStringToObject(config, "state_topic", "~/ota/version");
+        cJSON_AddStringToObject(config, "value_template", "{{ value_json.running_partition }}");
+        cJSON_AddStringToObject(config, "icon", "mdi:sd");
+        cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+        cJSON_AddStringToObject(config, "entity_category", "diagnostic");
+
+        cJSON *device = create_device_json();
+        if (device) cJSON_AddItemToObject(config, "device", device);
+
+        ret = publish_discovery_config("sensor", "running_partition", config, true);
+        cJSON_Delete(config);
+        if (ret != ESP_OK) return ret;
+
+        vTaskDelay(pdMS_TO_TICKS(DISCOVERY_PUBLISH_DELAY_MS));
+    }
+
+    // ===== CHECK FOR UPDATES BUTTON =====
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config == NULL) return ESP_ERR_NO_MEM;
+
+        add_base_topic(config);
+        cJSON_AddStringToObject(config, "name", "Z6. Action: Check for Updates");
+        snprintf(unique_id, sizeof(unique_id), "%s_ota_check", discovery_config.device_id);
+        cJSON_AddStringToObject(config, "unique_id", unique_id);
+        cJSON_AddStringToObject(config, "command_topic", "~/command");
+        cJSON_AddStringToObject(config, "payload_press", "ota_check_update");
+        cJSON_AddStringToObject(config, "icon", "mdi:cloud-search");
+        cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+        cJSON *device = create_device_json();
+        if (device) cJSON_AddItemToObject(config, "device", device);
+
+        ret = publish_discovery_config("button", "ota_check", config, true);
+        cJSON_Delete(config);
+        if (ret != ESP_OK) return ret;
+
+        vTaskDelay(pdMS_TO_TICKS(DISCOVERY_PUBLISH_DELAY_MS));
+    }
+
+    // ===== START OTA UPDATE BUTTON =====
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config == NULL) return ESP_ERR_NO_MEM;
+
+        add_base_topic(config);
+        cJSON_AddStringToObject(config, "name", "Z7. Action: Start Update");
+        snprintf(unique_id, sizeof(unique_id), "%s_ota_start", discovery_config.device_id);
+        cJSON_AddStringToObject(config, "unique_id", unique_id);
+        cJSON_AddStringToObject(config, "command_topic", "~/command");
+        cJSON_AddStringToObject(config, "payload_press", "ota_start_update");
+        cJSON_AddStringToObject(config, "icon", "mdi:download");
+        cJSON_AddStringToObject(config, "device_class", "update");
+        cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+        cJSON *device = create_device_json();
+        if (device) cJSON_AddItemToObject(config, "device", device);
+
+        ret = publish_discovery_config("button", "ota_start", config, true);
+        cJSON_Delete(config);
+        if (ret != ESP_OK) return ret;
+
+        vTaskDelay(pdMS_TO_TICKS(DISCOVERY_PUBLISH_DELAY_MS));
+    }
+
+    // ===== CANCEL UPDATE BUTTON =====
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config == NULL) return ESP_ERR_NO_MEM;
+
+        add_base_topic(config);
+        cJSON_AddStringToObject(config, "name", "Z8. Action: Cancel Update");
+        snprintf(unique_id, sizeof(unique_id), "%s_ota_cancel", discovery_config.device_id);
+        cJSON_AddStringToObject(config, "unique_id", unique_id);
+        cJSON_AddStringToObject(config, "command_topic", "~/command");
+        cJSON_AddStringToObject(config, "payload_press", "ota_cancel_update");
+        cJSON_AddStringToObject(config, "icon", "mdi:cancel");
+        cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+        cJSON *device = create_device_json();
+        if (device) cJSON_AddItemToObject(config, "device", device);
+
+        ret = publish_discovery_config("button", "ota_cancel", config, true);
+        cJSON_Delete(config);
+        if (ret != ESP_OK) return ret;
+
+        vTaskDelay(pdMS_TO_TICKS(DISCOVERY_PUBLISH_DELAY_MS));
+    }
+
+    ESP_LOGI(TAG, "✅ Published OTA control entities (6 sensors + 3 buttons)");
+    return ret;
+}
+
+/**
  * @brief Publish Home Assistant discovery for Westminster chime controls
  *
  * Creates three entities in Home Assistant:
@@ -1454,6 +1700,13 @@ esp_err_t mqtt_discovery_publish_all(void)
     ret = mqtt_discovery_publish_chime_controls();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to publish chime control discoveries");
+        return ret;
+    }
+
+    // Publish OTA control entities (Phase 2.4)
+    ret = mqtt_discovery_publish_ota_controls();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to publish OTA control discoveries");
         return ret;
     }
 
