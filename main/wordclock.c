@@ -33,6 +33,7 @@
 #include "audio_manager.h"   // ESP32-S3: External MAX98357A on GPIO 5/6/7
 #include "sdcard_manager.h"  // ESP32-S3: External SD card on GPIO 10/11/12/13
 #include "chime_manager.h"   // ESP32-S3: Westminster chimes (Phase 2.3)
+#include "ota_manager.h"     // ESP32-S3: OTA firmware updates (Phase 2.4)
 
 // Refactored modules
 #include "wordclock_display.h"
@@ -157,6 +158,21 @@ static esp_err_t initialize_hardware(void)
     } else {
         ESP_LOGI(TAG, "✅ Chime manager initialized (disabled by default)");
         ESP_LOGI(TAG, "   Enable via MQTT: home/Clock_Stani_1/chimes/enable");
+    }
+
+    // Initialize OTA update manager (Phase 2.4)
+    ESP_LOGI(TAG, "Initializing OTA update manager...");
+    ret = ota_manager_init();
+    if (ret == ESP_ERR_NOT_FOUND) {
+        ESP_LOGW(TAG, "⚠️ OTA partitions not found - OTA updates not available");
+        ESP_LOGW(TAG, "   Current partition table does not support OTA");
+        ESP_LOGW(TAG, "   To enable OTA: Flash with partitions_ota.csv");
+    } else if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "⚠️ OTA manager init failed - continuing without OTA updates");
+    } else {
+        ESP_LOGI(TAG, "✅ OTA manager initialized");
+        ESP_LOGI(TAG, "   Check updates: mosquitto_pub -t 'home/Clock_Stani_1/command' -m 'ota_check_update'");
+        ESP_LOGI(TAG, "   Start update:  mosquitto_pub -t 'home/Clock_Stani_1/command' -m 'ota_start_update'");
     }
 
     // Initialize display system and clear all LEDs
