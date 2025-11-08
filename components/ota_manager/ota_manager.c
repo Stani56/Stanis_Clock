@@ -65,8 +65,10 @@ static struct {
 #define NVS_KEY_FIRST_BOOT  "first_boot"
 
 // Health check configuration
-#define OTA_HEALTH_CHECK_DELAY_MS       30000  // 30s grace period for system stabilization
-#define OTA_HEALTH_CHECK_REQUIRED_PASS  4      // 4 out of 5 checks must pass
+#define OTA_HEALTH_CHECK_DELAY_MS          30000  // 30s grace period for system stabilization
+#define OTA_HEALTH_CHECK_RETRY_ATTEMPTS    3      // Number of retry attempts
+#define OTA_HEALTH_CHECK_RETRY_INTERVAL_MS 30000  // 30s between retry attempts
+#define OTA_CRITICAL_CHECKS_REQUIRED       3      // I2C + Memory + Partition must pass
 
 // Forward declarations
 static void ota_task(void *pvParameters);
@@ -818,11 +820,15 @@ const char* ota_error_to_string(ota_error_t error)
 //=============================================================================
 
 /**
- * @brief Automatic health check task
+ * @brief Automatic health check task with tiered validation and retry logic
  *
  * Runs automatically after OTA update to validate new firmware.
- * Waits 30 seconds for system stabilization, then performs health checks.
- * Marks app as valid on success, triggers rollback on failure.
+ * Uses tiered approach:
+ *   - Critical checks: I2C, Memory, Partition (MUST pass)
+ *   - Network checks: WiFi, MQTT (retried 3 times with 30s intervals)
+ *
+ * Accepts firmware if critical checks pass, even if network is temporarily unavailable.
+ * Only triggers rollback if critical hardware/firmware checks fail.
  */
 static void ota_health_check_task(void *pvParameters)
 {
@@ -840,13 +846,100 @@ static void ota_health_check_task(void *pvParameters)
         return;
     }
 
-    ESP_LOGI(TAG, "🔍 Performing automatic health validation...");
+    ESP_LOGI(TAG, "🔍 Starting automatic health validation with retry logic...");
 
-    // Perform health checks
-    esp_err_t result = ota_perform_health_checks();
+    bool validation_passed = false;
 
-    if (result == ESP_OK) {
-        // All checks passed - mark app as valid
+    // Perform health checks with retries
+    for (int attempt = 1; attempt <= OTA_HEALTH_CHECK_RETRY_ATTEMPTS; attempt++) {
+        ESP_LOGI(TAG, "📊 Health check attempt %d/%d", attempt, OTA_HEALTH_CHECK_RETRY_ATTEMPTS);
+
+        // Run full health check suite
+        esp_err_t result = ota_perform_health_checks();
+
+        if (result == ESP_OK) {
+            // All checks passed (including network) - perfect!
+            ESP_LOGI(TAG, "✅ All health checks passed (5/5)");
+            validation_passed = true;
+            break;
+        }
+
+        // Some checks failed - determine if critical or non-critical
+        ESP_LOGW(TAG, "⚠️ Some health checks failed, analyzing...");
+
+        // Re-check CRITICAL components only
+        uint8_t critical_passed = 0;
+
+        // Critical Check 1: I2C Bus (hardware drivers)
+        uint8_t dummy_time[7];
+        if (ds3231_get_time_struct(dummy_time) == ESP_OK) {
+            ESP_LOGI(TAG, "  ✅ CRITICAL: I2C bus operational");
+            critical_passed++;
+        } else {
+            ESP_LOGE(TAG, "  ❌ CRITICAL: I2C bus failed");
+        }
+
+        // Critical Check 2: Memory (no leaks/corruption)
+        uint32_t free_heap = esp_get_free_heap_size();
+        if (free_heap > 50000) {
+            ESP_LOGI(TAG, "  ✅ CRITICAL: Memory OK (%lu bytes free)", free_heap);
+            critical_passed++;
+        } else {
+            ESP_LOGE(TAG, "  ❌ CRITICAL: Low memory (%lu bytes)", free_heap);
+        }
+
+        // Critical Check 3: Partition (bootloader worked)
+        const esp_partition_t *running = esp_ota_get_running_partition();
+        if (running != NULL) {
+            ESP_LOGI(TAG, "  ✅ CRITICAL: Partition valid (%s)", running->label);
+            critical_passed++;
+        } else {
+            ESP_LOGE(TAG, "  ❌ CRITICAL: Partition invalid");
+        }
+
+        ESP_LOGI(TAG, "📊 Critical checks: %d/%d passed", critical_passed, OTA_CRITICAL_CHECKS_REQUIRED);
+
+        // Evaluate results
+        if (critical_passed >= OTA_CRITICAL_CHECKS_REQUIRED) {
+            // Critical checks passed - firmware is functional
+            ESP_LOGI(TAG, "✅ Firmware is functional (critical checks passed)");
+
+            if (attempt < OTA_HEALTH_CHECK_RETRY_ATTEMPTS) {
+                // Not final attempt - retry for network services
+                ESP_LOGW(TAG, "⚠️ Network services not ready, will retry in %d seconds...",
+                         OTA_HEALTH_CHECK_RETRY_INTERVAL_MS / 1000);
+                vTaskDelay(pdMS_TO_TICKS(OTA_HEALTH_CHECK_RETRY_INTERVAL_MS));
+                continue;
+            } else {
+                // Final attempt - accept firmware despite network issues
+                ESP_LOGW(TAG, "⚠️ VALIDATION PASSED WITH WARNINGS:");
+                ESP_LOGW(TAG, "   ✅ Firmware is functional (critical checks passed)");
+                ESP_LOGW(TAG, "   ⚠️ Network services not available (non-critical)");
+                ESP_LOGW(TAG, "   ℹ️ WiFi/MQTT will reconnect automatically when available");
+                validation_passed = true;
+                break;
+            }
+        } else {
+            // Critical checks failed - firmware is broken
+            ESP_LOGE(TAG, "❌ CRITICAL: Hardware/firmware checks failed (%d/%d)",
+                     critical_passed, OTA_CRITICAL_CHECKS_REQUIRED);
+
+            if (attempt < OTA_HEALTH_CHECK_RETRY_ATTEMPTS) {
+                ESP_LOGW(TAG, "⏳ Retrying in %d seconds...",
+                         OTA_HEALTH_CHECK_RETRY_INTERVAL_MS / 1000);
+                vTaskDelay(pdMS_TO_TICKS(OTA_HEALTH_CHECK_RETRY_INTERVAL_MS));
+            } else {
+                // All attempts exhausted, critical checks still failing
+                ESP_LOGE(TAG, "❌ CRITICAL: Firmware validation failed after %d attempts",
+                         OTA_HEALTH_CHECK_RETRY_ATTEMPTS);
+                validation_passed = false;
+                break;
+            }
+        }
+    }
+
+    // Final decision
+    if (validation_passed) {
         esp_err_t ret = ota_mark_app_valid();
         if (ret == ESP_OK) {
             ESP_LOGI(TAG, "✅ AUTOMATIC VALIDATION PASSED - App marked valid");
@@ -856,9 +949,9 @@ static void ota_health_check_task(void *pvParameters)
                      esp_err_to_name(ret));
         }
     } else {
-        // Health checks failed - trigger rollback
         ESP_LOGE(TAG, "❌ AUTOMATIC VALIDATION FAILED!");
-        ESP_LOGE(TAG, "❌ System health checks did not pass");
+        ESP_LOGE(TAG, "❌ Critical system checks failed after %d attempts",
+                 OTA_HEALTH_CHECK_RETRY_ATTEMPTS);
         ESP_LOGE(TAG, "❌ Triggering rollback to previous firmware in 5 seconds...");
 
         // Give time for logs to be transmitted before reboot
