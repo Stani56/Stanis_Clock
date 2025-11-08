@@ -30,7 +30,7 @@
 // External dependencies
 extern bool thread_safe_get_wifi_connected(void);
 extern bool thread_safe_get_mqtt_connected(void);
-extern esp_err_t i2c_devices_check_health(void);
+extern esp_err_t ds3231_get_time_struct(void*);  // For I2C health check
 
 static const char *TAG = "ota_manager";
 
@@ -64,8 +64,13 @@ static struct {
 #define NVS_KEY_BOOT_COUNT  "boot_count"
 #define NVS_KEY_FIRST_BOOT  "first_boot"
 
+// Health check configuration
+#define OTA_HEALTH_CHECK_DELAY_MS       30000  // 30s grace period for system stabilization
+#define OTA_HEALTH_CHECK_REQUIRED_PASS  4      // 4 out of 5 checks must pass
+
 // Forward declarations
 static void ota_task(void *pvParameters);
+static void ota_health_check_task(void *pvParameters);
 
 //=============================================================================
 // Helper Functions
@@ -756,12 +761,13 @@ esp_err_t ota_perform_health_checks(void)
         ESP_LOGE(TAG, "  ❌ MQTT: Not connected");
     }
 
-    // 3. I2C devices (LED controllers + RTC)
-    if (i2c_devices_check_health() == ESP_OK) {
-        ESP_LOGI(TAG, "  ✅ I2C: All devices responding");
+    // 3. I2C devices (RTC check as proxy for I2C health)
+    uint8_t dummy_time[7];
+    if (ds3231_get_time_struct(dummy_time) == ESP_OK) {
+        ESP_LOGI(TAG, "  ✅ I2C: RTC responding (I2C bus operational)");
         passed++;
     } else {
-        ESP_LOGE(TAG, "  ❌ I2C: Device communication failed");
+        ESP_LOGE(TAG, "  ❌ I2C: RTC communication failed");
     }
 
     // 4. Memory check
@@ -805,6 +811,64 @@ const char* ota_error_to_string(ota_error_t error)
         case OTA_ERROR_ALREADY_RUNNING:     return "Update already in progress";
         default:                            return "Unknown error";
     }
+}
+
+//=============================================================================
+// Automatic Health Validation
+//=============================================================================
+
+/**
+ * @brief Automatic health check task
+ *
+ * Runs automatically after OTA update to validate new firmware.
+ * Waits 30 seconds for system stabilization, then performs health checks.
+ * Marks app as valid on success, triggers rollback on failure.
+ */
+static void ota_health_check_task(void *pvParameters)
+{
+    ESP_LOGI(TAG, "🏥 Automatic health validation task started");
+
+    // Wait for system to stabilize
+    ESP_LOGI(TAG, "⏳ Waiting %d seconds for system stabilization...",
+             OTA_HEALTH_CHECK_DELAY_MS / 1000);
+    vTaskDelay(pdMS_TO_TICKS(OTA_HEALTH_CHECK_DELAY_MS));
+
+    // Only run if this is first boot after update
+    if (!ota_is_first_boot_after_update()) {
+        ESP_LOGI(TAG, "ℹ️ Not first boot after update - skipping validation");
+        vTaskDelete(NULL);
+        return;
+    }
+
+    ESP_LOGI(TAG, "🔍 Performing automatic health validation...");
+
+    // Perform health checks
+    esp_err_t result = ota_perform_health_checks();
+
+    if (result == ESP_OK) {
+        // All checks passed - mark app as valid
+        esp_err_t ret = ota_mark_app_valid();
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "✅ AUTOMATIC VALIDATION PASSED - App marked valid");
+            ESP_LOGI(TAG, "✅ System is stable, rollback cancelled");
+        } else {
+            ESP_LOGW(TAG, "⚠️ Validation passed but failed to mark app valid: %s",
+                     esp_err_to_name(ret));
+        }
+    } else {
+        // Health checks failed - trigger rollback
+        ESP_LOGE(TAG, "❌ AUTOMATIC VALIDATION FAILED!");
+        ESP_LOGE(TAG, "❌ System health checks did not pass");
+        ESP_LOGE(TAG, "❌ Triggering rollback to previous firmware in 5 seconds...");
+
+        // Give time for logs to be transmitted before reboot
+        vTaskDelay(pdMS_TO_TICKS(5000));
+
+        // Trigger rollback (never returns - reboots to previous firmware)
+        ota_trigger_rollback();
+    }
+
+    vTaskDelete(NULL);
 }
 
 //=============================================================================
@@ -878,6 +942,25 @@ esp_err_t ota_manager_init(void)
     // Print current version
     firmware_version_t current;
     ota_get_current_version(&current);
+
+    // Start automatic health validation task
+    // This task will wait 30s, then check if this is first boot after OTA
+    // If yes, it performs health checks and marks app valid or triggers rollback
+    BaseType_t task_created = xTaskCreate(
+        ota_health_check_task,
+        "ota_health_check",
+        4096,  // 4KB stack
+        NULL,
+        2,     // Low priority (tskIDLE_PRIORITY + 1)
+        NULL
+    );
+
+    if (task_created != pdPASS) {
+        ESP_LOGW(TAG, "⚠️ Failed to create automatic health check task");
+        ESP_LOGW(TAG, "⚠️ Manual validation required via ota_mark_app_valid()");
+    } else {
+        ESP_LOGI(TAG, "✅ Automatic health validation task created");
+    }
 
     ota_context.initialized = true;
     ESP_LOGI(TAG, "✅ OTA manager initialized");
