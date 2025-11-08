@@ -674,7 +674,10 @@ esp_err_t ota_mark_app_valid(void)
     esp_ota_img_states_t ota_state;
 
     if (esp_ota_get_state_partition(running, &ota_state) == ESP_OK) {
+        ESP_LOGI(TAG, "📊 Current partition state: %d", ota_state);
+
         if (ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
+            ESP_LOGI(TAG, "🔄 Partition is PENDING_VERIFY, marking as valid...");
             esp_err_t ret = esp_ota_mark_app_valid_cancel_rollback();
 
             if (ret == ESP_OK) {
@@ -689,11 +692,37 @@ esp_err_t ota_mark_app_valid(void)
                 }
 
                 return ESP_OK;
+            } else {
+                ESP_LOGE(TAG, "❌ esp_ota_mark_app_valid_cancel_rollback() failed: %s",
+                         esp_err_to_name(ret));
+                return ESP_FAIL;
             }
-        }
-    }
+        } else if (ota_state == ESP_OTA_IMG_VALID) {
+            ESP_LOGI(TAG, "ℹ️ Partition already marked VALID (possibly by bootloader)");
 
-    return ESP_FAIL;
+            // Clear first boot flag anyway
+            nvs_handle_t nvs_handle;
+            if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+                nvs_set_u8(nvs_handle, NVS_KEY_FIRST_BOOT, 0);
+                nvs_commit(nvs_handle);
+                nvs_close(nvs_handle);
+            }
+
+            return ESP_OK;  // This is actually a success case
+        } else if (ota_state == ESP_OTA_IMG_INVALID) {
+            ESP_LOGE(TAG, "❌ Partition is marked INVALID!");
+            return ESP_FAIL;
+        } else if (ota_state == ESP_OTA_IMG_ABORTED) {
+            ESP_LOGE(TAG, "❌ Partition update was ABORTED!");
+            return ESP_FAIL;
+        } else {
+            ESP_LOGW(TAG, "⚠️ Unknown partition state: %d", ota_state);
+            return ESP_FAIL;
+        }
+    } else {
+        ESP_LOGE(TAG, "❌ Failed to get partition state");
+        return ESP_FAIL;
+    }
 }
 
 esp_err_t ota_trigger_rollback(void)
