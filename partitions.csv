@@ -1,7 +1,11 @@
 # Name,   Type, SubType, Offset,  Size,    Flags
-# ESP32 German Word Clock - Conservative partition table for large application (16 components)
-# Total flash: 4MB, App size: 2.5MB (increased from 1.5MB to accommodate all components)
+# ESP32-S3 German Word Clock - OTA-enabled partition table (16MB flash)
+# Total flash: 16MB
+# App partitions: 2× 2.5MB (ota_0 + ota_1) for dual-partition OTA
+# Storage: 1.5MB for data/config
 nvs,      data, nvs,     0x9000,  0x6000,
-phy_init, data, phy,     0xf000,  0x1000,
-factory,  app,  factory, 0x10000, 0x280000,
-storage,  data, fat,     0x290000, 0x160000,
+otadata,  data, ota,     0xf000,  0x2000,
+phy_init, data, phy,     0x11000, 0x1000,
+ota_0,    app,  ota_0,   0x20000, 0x280000,
+ota_1,    app,  ota_1,   0x2a0000, 0x280000,
+storage,  data, fat,     0x520000, 0x160000,
