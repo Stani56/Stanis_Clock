@@ -2,14 +2,35 @@
 
 ## Quick Reference
 
-**Platform:** ESP32-S3-N16R8-DevKitC-1 with external MAX98357A + microSD
+**Platforms:**
+- **YB-ESP32-S3-AMP** (default): N8R2 with integrated MAX98357A + microSD
+- **ESP32-S3-DevKitC-1**: N16R8 with external MAX98357A + microSD
+
 **Repository:** https://github.com/stani56/Stanis_Clock
-**Status:** Production-ready IoT word clock with Home Assistant integration + Audio (Phase 2.1 ✅) + SD Card (Phase 2.2 ✅) + Westminster Chimes (Phase 2.3 ✅)
+**Status:** Production-ready IoT word clock with Home Assistant integration + Audio (Phase 2.1 ✅) + SD Card (Phase 2.2 ✅) + Westminster Chimes (Phase 2.3 ✅) + Multi-board Support (Phase 2.4 ✅)
 **Legacy:** ESP32-PICO-D4 version available at tag `v1.0-esp32-final`
 
 ## Essential Build Information
 
-### Hardware Setup (ESP32-S3-DevKitC-1)
+### Hardware Setup - YB-ESP32-S3-AMP (Default)
+```
+GPIO 1/42  → I2C Sensors (DS3231 RTC, BH1750 light sensor) - GPIO 42 WiFi-safe
+GPIO 8/9   → I2C LEDs (10× TLC59116 controllers @ 0x60-0x6A)
+GPIO 3     → Potentiometer (brightness control) - ADC1_CH2, WiFi safe
+GPIO 21/38 → Status LEDs (WiFi/NTP indicators) - WiFi safe
+GPIO 0     → Reset button (boot button)
+GPIO 5/6/7 → Integrated I2S Audio (MAX98357A): BCLK=5, LRCLK=6, DIN=7 ✅ Phase 2.1 complete
+GPIO 10/11/12/13 → Integrated microSD (SPI): CS=10, MOSI=11, CLK=12, MISO=13 ✅ Phase 2.2 complete
+GPIO 47    → Onboard status LED
+```
+
+**LED Matrix:** 10 rows × 16 columns (160 LEDs)
+**I2C Speed:** 100kHz (conservative for reliability)
+**Flash:** 8MB (ESP32-S3-WROOM-1-N8R2)
+**PSRAM:** 2MB Quad SPI PSRAM @ 80MHz
+**Audio:** 2× Integrated MAX98357A I2S amplifiers (stereo capable)
+
+### Hardware Setup - ESP32-S3-DevKitC-1 (Legacy)
 ```
 GPIO 1/18  → I2C Sensors (DS3231 RTC, BH1750 light sensor) - ADC1_CH0 + no ADC
 GPIO 8/9   → I2C LEDs (10× TLC59116 controllers @ 0x60-0x6A)
@@ -24,9 +45,30 @@ GPIO 10/11/12/13 → External microSD (SPI): CS=10, MOSI=11, CLK=12, MISO=13 ✅
 
 **LED Matrix:** 10 rows × 16 columns (160 LEDs)
 **I2C Speed:** 100kHz (conservative for reliability)
-**Flash:** 16MB (ESP32-S3-N16R8), 2.5MB app partition (see `partitions.csv`)
+**Flash:** 16MB (ESP32-S3-N16R8)
 **PSRAM:** 8MB Octal PSRAM @ 80MHz
-**Audio:** 2× MAX98357A I2S amplifiers (built-in, for future chime system)
+**Audio:** 2× External MAX98357A I2S amplifiers
+
+### Multi-Board Support (Phase 2.4 ✅)
+**Board Selection:** Automatic via `components/board_config/include/board_config.h`
+- Default: YB-ESP32-S3-AMP (integrated peripherals)
+- Override: Define `CONFIG_BOARD_DEVKITC` in build settings
+
+**Key Differences:**
+| Feature | YB-AMP (Default) | DevKitC-1 (Legacy) |
+|---------|------------------|-------------------|
+| Flash | 8MB | 16MB |
+| PSRAM | 2MB Quad SPI | 8MB Octal SPI |
+| I2C SCL (Sensors) | GPIO 42 (WiFi-safe) | GPIO 18 (ADC2 conflict) |
+| Audio | Integrated stereo | External mono |
+| MicroSD | Integrated | External |
+| Status LED | GPIO 47 onboard | None |
+
+**CRITICAL - PSRAM Configuration:**
+- **YB-AMP:** Requires `CONFIG_SPIRAM_MODE_QUAD=y` (2MB Quad SPI)
+- **DevKitC:** Requires `CONFIG_SPIRAM_MODE_OCT=y` (8MB Octal SPI)
+- **Memory Impact:** PSRAM disabled = 303KB free heap → MQTT instability (errno=119)
+- **Memory Impact:** PSRAM enabled = 2.3MB free heap (7.6× improvement) → Stable MQTT/TLS
 
 ### Quick Start
 ```bash
@@ -253,11 +295,38 @@ home/[DEVICE_NAME]/error_log/clear
 
 ## Build Configuration
 
-### ESP-IDF Settings
+### ESP-IDF Settings - YB-AMP (Default)
 ```bash
-CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+# Flash and partition
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_FREERTOS_HZ=1000
+
+# PSRAM - CRITICAL for MQTT/TLS stability
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_QUAD=y              # 2MB Quad SPI PSRAM
+CONFIG_SPIRAM_TYPE_AUTO=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_BOOT_INIT=y
+CONFIG_SPIRAM_USE_MALLOC=y
+CONFIG_SPIRAM_MEMTEST=y
+```
+
+### ESP-IDF Settings - DevKitC-1 (Legacy)
+```bash
+# Flash and partition
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_FREERTOS_HZ=1000
+
+# PSRAM
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y               # 8MB Octal PSRAM
+CONFIG_SPIRAM_TYPE_AUTO=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_BOOT_INIT=y
+CONFIG_SPIRAM_USE_MALLOC=y
+CONFIG_SPIRAM_MEMTEST=y
 ```
 
 ### Partition Table (partitions.csv)
@@ -269,13 +338,44 @@ storage,  data, fat,     0x290000, 0x160000,  # 1.5MB storage
 ```
 
 ### Common Build Issues
+
+**Wrong PSRAM mode (CRITICAL):**
+YB-AMP requires Quad SPI, DevKitC requires Octal SPI. Symptoms: PSRAM not detected, low free heap (<500KB), MQTT disconnections.
+```bash
+# For YB-AMP (2MB Quad SPI PSRAM):
+idf.py menuconfig
+# → Component config → ESP PSRAM → Mode → Quad mode PSRAM
+# Verify: CONFIG_SPIRAM_MODE_QUAD=y in sdkconfig
+
+# For DevKitC (8MB Octal PSRAM):
+idf.py menuconfig
+# → Component config → ESP PSRAM → Mode → Octal mode PSRAM
+# Verify: CONFIG_SPIRAM_MODE_OCT=y in sdkconfig
+
+idf.py fullclean && idf.py build
+```
+
 **Partition size error:**
 ```bash
-idf.py menuconfig  # Serial flasher → Flash size → 4MB
+# YB-AMP: 8MB flash
+idf.py menuconfig  # Serial flasher → Flash size → 8MB
+
+# DevKitC: 16MB flash
+idf.py menuconfig  # Serial flasher → Flash size → 16MB
+
 idf.py fullclean && idf.py build
 ```
 
 **IntelliSense not working:** Run `idf.py build` (generates compile_commands.json)
+
+**MQTT disconnections after ~28 seconds:**
+Check PSRAM is enabled and correct mode selected. Monitor boot logs for:
+```
+I (335) esp_psram: Found 2MB PSRAM device    # YB-AMP
+I (335) esp_psram: Found 8MB PSRAM device    # DevKitC
+I (711) wordclock: Free heap: 2361220 bytes  # Should be >2MB
+```
+If PSRAM not detected, check sdkconfig PSRAM mode settings above.
 
 ## Performance Metrics
 
@@ -310,6 +410,16 @@ idf.py fullclean && idf.py build
 - Fixed zone discontinuity causing 50 lux brightness jumps
 - Active safety limit enforcement (80 PWM max)
 - Faster potentiometer updates (15s vs 100s = 6.7× improvement)
+
+### YB-AMP PSRAM Configuration (Nov 2025) - Phase 2.4 ✅
+- **Problem:** YB-ESP32-S3-AMP uses 2MB Quad SPI PSRAM (not 8MB Octal like DevKitC)
+- **Symptom:** MQTT disconnections after 28.4 seconds with errno=119 (EINPROGRESS)
+- **Root Cause:** PSRAM disabled → Only 303KB free heap → TLS buffer allocation failures during discovery publishing (36 large JSON payloads)
+- **Solution:** Enable Quad SPI PSRAM mode (`CONFIG_SPIRAM_MODE_QUAD=y`)
+- **Result:** 2.3MB free heap (7.6× improvement), stable MQTT/TLS, no disconnections
+- **Key Insight:** PSRAM is CRITICAL for MQTT/TLS stability - insufficient RAM causes connection timeouts
+- **Verification:** Boot log shows `esp_psram: Found 2MB PSRAM device`, `SPI SRAM memory test OK`
+- **Board Config:** Multi-board support via `board_config.h` component (GPIO abstraction layer)
 
 ### Thread Safety Requirements
 - Fixed 25+ race conditions across 6 components
