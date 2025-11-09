@@ -371,6 +371,22 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event
             mqtt_publish_chime_status();
             mqtt_publish_chime_volume();
 
+            // Publish initial OTA status (Phase 2.4) - Important after OTA update + reboot
+            ESP_LOGI(TAG, "📝 Publishing initial OTA status...");
+            esp_err_t ota_progress_ret = mqtt_publish_ota_progress();
+            if (ota_progress_ret == ESP_OK) {
+                ESP_LOGI(TAG, "✅ OTA progress status published");
+            } else {
+                ESP_LOGW(TAG, "⚠️ Failed to publish OTA progress status");
+            }
+
+            esp_err_t ota_version_ret = mqtt_publish_ota_version();
+            if (ota_version_ret == ESP_OK) {
+                ESP_LOGI(TAG, "✅ OTA version info published");
+            } else {
+                ESP_LOGW(TAG, "⚠️ Failed to publish OTA version info");
+            }
+
             // Publish initial error log statistics
             extern esp_err_t handle_error_log_stats_request(void);
             handle_error_log_stats_request();

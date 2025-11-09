@@ -36,8 +36,8 @@ extern "C" {
  */
 
 #if !defined(CONFIG_BOARD_DEVKITC) && !defined(CONFIG_BOARD_YB_AMP)
-    #define CONFIG_BOARD_DEVKITC 1  // Default to current hardware
-    #warning "No board selected, defaulting to ESP32-S3-DevKitC-1"
+    #define CONFIG_BOARD_YB_AMP 1  // YB-ESP32-S3-AMP with integrated audio/SD
+    #warning "No board selected, defaulting to YB-ESP32-S3-AMP"
 #endif
 
 //=============================================================================
