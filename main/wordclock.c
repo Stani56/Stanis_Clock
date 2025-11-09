@@ -480,6 +480,27 @@ static void test_live_word_clock(void)
                 // Publish heartbeat with NTP info
                 mqtt_publish_heartbeat_with_ntp();
             }
+
+            // Periodic PSRAM monitoring (every 100 seconds for migration planning)
+            size_t total_psram = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
+            if (total_psram > 0) {
+                size_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+                size_t used_psram = total_psram - free_psram;
+                size_t min_free_psram = heap_caps_get_minimum_free_size(MALLOC_CAP_SPIRAM);
+                size_t max_used_psram = total_psram - min_free_psram;
+
+                ESP_LOGI(TAG, "📊 PSRAM: Used %.2f MB / %.2f MB (%.1f%%), Peak %.2f MB",
+                         used_psram / 1048576.0,
+                         total_psram / 1048576.0,
+                         (used_psram * 100.0) / total_psram,
+                         max_used_psram / 1048576.0);
+
+                // Warn if approaching or exceeding YB-AMP limit
+                if (max_used_psram > 2097152) {  // Peak usage > 2MB
+                    ESP_LOGW(TAG, "⚠️ Peak PSRAM usage (%.2f MB) exceeds YB-AMP capacity (2MB)",
+                             max_used_psram / 1048576.0);
+                }
+            }
         }
 
         // 5 second update interval
@@ -499,7 +520,32 @@ void app_main(void)
     ESP_LOGI(TAG, "ESP-IDF Version: %s", esp_get_idf_version());
     ESP_LOGI(TAG, "Free heap: %ld bytes", esp_get_free_heap_size());
     ESP_LOGI(TAG, "Minimum free heap: %ld bytes", esp_get_minimum_free_heap_size());
-    
+
+    // Log PSRAM information (critical for YB-ESP32-S3-AMP migration planning)
+    size_t total_psram = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
+    size_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+    size_t used_psram = total_psram - free_psram;
+    if (total_psram > 0) {
+        ESP_LOGI(TAG, "📊 PSRAM Total: %zu bytes (%zu KB, %.1f MB)",
+                 total_psram, total_psram / 1024, total_psram / 1048576.0);
+        ESP_LOGI(TAG, "📊 PSRAM Used: %zu bytes (%zu KB, %.1f MB)",
+                 used_psram, used_psram / 1024, used_psram / 1048576.0);
+        ESP_LOGI(TAG, "📊 PSRAM Free: %zu bytes (%zu KB, %.1f MB)",
+                 free_psram, free_psram / 1024, free_psram / 1048576.0);
+        ESP_LOGI(TAG, "📊 PSRAM Usage: %.1f%%", (used_psram * 100.0) / total_psram);
+
+        // YB-AMP migration check: Warn if usage > 2MB
+        if (used_psram > 2097152) {  // 2MB in bytes
+            ESP_LOGW(TAG, "⚠️ PSRAM MIGRATION WARNING: Usage exceeds YB-AMP capacity (2MB)!");
+            ESP_LOGW(TAG, "⚠️ YB-ESP32-S3-AMP has only 2MB PSRAM vs current 8MB");
+            ESP_LOGW(TAG, "⚠️ Optimization required before migration");
+        } else {
+            ESP_LOGI(TAG, "✅ PSRAM usage compatible with YB-AMP (< 2MB)");
+        }
+    } else {
+        ESP_LOGW(TAG, "⚠️ No PSRAM detected");
+    }
+
     // Get CPU frequency
     rtc_cpu_freq_config_t freq_config;
     rtc_clk_cpu_freq_get_config(&freq_config);
