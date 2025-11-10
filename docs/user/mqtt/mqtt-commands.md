@@ -178,16 +178,17 @@ Payload: {"volume": 0-100}
 **Manual Update Check:**
 ```bash
 Topic: home/Clock_Stani_1/command
-Payload: ota_check
+Payload: ota_check_update
 ```
 **Response:** Checks GitHub releases for newer firmware version
+**Status:** Publishes `ota_update_available` or `ota_up_to_date`
 
 ### Start OTA Update
 
 **Start Firmware Update (Auto-Reboot):**
 ```bash
 Topic: home/Clock_Stani_1/command
-Payload: ota_update
+Payload: ota_start_update
 ```
 **Process:**
 1. Downloads firmware from GitHub releases (latest)
@@ -200,8 +201,24 @@ Payload: ota_update
 **Cancel Ongoing Update:**
 ```bash
 Topic: home/Clock_Stani_1/command
-Payload: ota_cancel
+Payload: ota_cancel_update
 ```
+
+### Get OTA Information
+
+**Get Current Progress:**
+```bash
+Topic: home/Clock_Stani_1/command
+Payload: ota_get_progress
+```
+**Response Topic:** `home/Clock_Stani_1/ota/progress`
+
+**Get Version Information:**
+```bash
+Topic: home/Clock_Stani_1/command
+Payload: ota_get_version
+```
+**Response Topic:** `home/Clock_Stani_1/ota/version`
 
 ### OTA State Topics (Read-Only)
 
@@ -651,15 +668,21 @@ homeassistant/{component_type}/Clock_Stani_1_{MAC}/entity_name/config
 - `"transitions_enabled"` / `"transitions_disabled"` - Mode changed
 - `"chimes_enabled"` / `"chimes_disabled"` - Chime state changed
 - `"chimes_volume_set"` - Volume updated
+- `"ota_update_available"` - Newer firmware version found
+- `"ota_up_to_date"` - Already running latest version
 - `"ota_update_started"` - Firmware download started
 - `"ota_update_complete"` - Update successful, rebooting
+- `"ota_cancelled"` - Update cancelled successfully
 - `"time_set_successfully"` - RTC time updated
 - `"heartbeat"` - Periodic status (every 60 seconds)
 
 **Error Responses:**
 - `"invalid_time_format"` - Time command format error
 - `"chimes_enable_failed"` - Chime enable error
+- `"ota_check_failed"` - Failed to check for updates
 - `"ota_update_failed"` - OTA download/flash error
+- `"ota_cancel_failed"` - Cannot cancel at this stage
+- `"ota_already_running"` - Update already in progress
 - `"transition_duration_out_of_range"` - Invalid duration value
 
 ---
@@ -671,8 +694,11 @@ homeassistant/{component_type}/Clock_Stani_1_{MAC}/entity_name/config
 **Disable Chimes:** `chimes_disable`
 **Volume 75%:** `chimes_volume_75`
 **Test Strike:** `chimes_test_strike`
-**OTA Update:** `ota_update`
-**OTA Check:** `ota_check`
+**OTA Check:** `ota_check_update`
+**OTA Update:** `ota_start_update`
+**OTA Cancel:** `ota_cancel_update`
+**Get OTA Progress:** `ota_get_progress`
+**Get OTA Version:** `ota_get_version`
 **Start Transitions:** `test_transitions_start`
 **Stop Transitions:** `test_transitions_stop`
 **Refresh Sensors:** `refresh_sensors`
