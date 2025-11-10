@@ -170,6 +170,83 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt)
 // Version Management
 //=============================================================================
 
+/**
+ * @brief Normalize version string to semver format (strip git metadata)
+ *
+ * Converts: "v2.6.3-2-g1052452-dirty" → "2.6.3"
+ * Converts: "2.6.3" → "2.6.3"
+ * Converts: "v2.6.3" → "2.6.3"
+ *
+ * @param version Input version string (may be git describe format)
+ * @param normalized Output buffer for normalized version
+ * @param max_len Maximum length of output buffer
+ */
+static void normalize_version(const char *version, char *normalized, size_t max_len)
+{
+    if (version == NULL || normalized == NULL || max_len == 0) {
+        return;
+    }
+
+    // Skip leading 'v' if present
+    const char *start = version;
+    if (start[0] == 'v' || start[0] == 'V') {
+        start++;
+    }
+
+    // Copy until we hit git metadata markers (-, +) or end
+    size_t i = 0;
+    while (start[i] != '\0' && i < (max_len - 1)) {
+        // Stop at first '-' (git commit count) or '+' (build metadata)
+        if (start[i] == '-' || start[i] == '+') {
+            break;
+        }
+        normalized[i] = start[i];
+        i++;
+    }
+    normalized[i] = '\0';
+
+    ESP_LOGD(TAG, "Version normalized: '%s' → '%s'", version, normalized);
+}
+
+/**
+ * @brief Compare two version strings (semver-aware)
+ *
+ * Normalizes both versions before comparison to handle git describe format.
+ * Returns: 0 if equal, <0 if v1 < v2, >0 if v1 > v2
+ *
+ * @param v1 First version string
+ * @param v2 Second version string
+ * @return int Comparison result
+ */
+static int compare_versions(const char *v1, const char *v2)
+{
+    char norm1[32] = {0};
+    char norm2[32] = {0};
+
+    normalize_version(v1, norm1, sizeof(norm1));
+    normalize_version(v2, norm2, sizeof(norm2));
+
+    // Parse major.minor.patch from both versions
+    int major1 = 0, minor1 = 0, patch1 = 0;
+    int major2 = 0, minor2 = 0, patch2 = 0;
+
+    sscanf(norm1, "%d.%d.%d", &major1, &minor1, &patch1);
+    sscanf(norm2, "%d.%d.%d", &major2, &minor2, &patch2);
+
+    // Compare major version
+    if (major1 != major2) {
+        return major1 - major2;
+    }
+
+    // Compare minor version
+    if (minor1 != minor2) {
+        return minor1 - minor2;
+    }
+
+    // Compare patch version
+    return patch1 - patch2;
+}
+
 esp_err_t ota_get_current_version(firmware_version_t *version)
 {
     if (version == NULL) {
@@ -329,16 +406,25 @@ esp_err_t ota_check_for_updates(firmware_version_t *available_version)
 
                 available_version->size_bytes = size_obj ? size_obj->valueint : 0;
 
-                // Compare versions
+                // Compare versions (semver-aware, handles git describe format)
                 firmware_version_t current;
                 ota_get_current_version(&current);
 
-                if (strcmp(available_version->version, current.version) != 0) {
+                int version_cmp = compare_versions(current.version, available_version->version);
+                if (version_cmp < 0) {
+                    // Current version is older than available version
                     ESP_LOGI(TAG, "Update available: %s → %s",
                             current.version, available_version->version);
                     ret = ESP_OK;
+                } else if (version_cmp == 0) {
+                    // Versions are equal (same major.minor.patch)
+                    ESP_LOGI(TAG, "Already running latest version: %s (available: %s)",
+                            current.version, available_version->version);
+                    ret = ESP_ERR_NOT_FOUND;
                 } else {
-                    ESP_LOGI(TAG, "Already running latest version: %s", current.version);
+                    // Current version is NEWER than available (dev build?)
+                    ESP_LOGW(TAG, "Current version %s is NEWER than available %s (development build?)",
+                            current.version, available_version->version);
                     ret = ESP_ERR_NOT_FOUND;
                 }
             } else {
