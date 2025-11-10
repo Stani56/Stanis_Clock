@@ -423,17 +423,22 @@ The word clock features authentic Westminster chime sounds that play at quarter-
 - ✅ Westminster chime audio files (PCM format)
 - ✅ SD card inserted before power-on
 
-**Audio File Structure:**
+**Audio File Structure (8.3 Format - FAT32 Compatibility):**
 ```
 /sdcard/
 └── CHIMES/
-    └── WESTMINSTER/
-        ├── QUARTER1.PCM   (First quarter)
-        ├── QUARTER2.PCM   (Half hour)
-        ├── QUARTER3.PCM   (Three quarters)
-        ├── QUARTER4.PCM   (Full hour sequence)
+    └── WESTMI~1/          (WESTMINSTER truncated to 8.3 format)
+        ├── QUARTE~1.PCM   (QUARTER_PAST.PCM - First quarter :15)
+        ├── HALF_P~1.PCM   (HALF_PAST.PCM - Half hour :30)
+        ├── QUARTE~2.PCM   (QUARTER_TO.PCM - Three quarters :45)
+        ├── HOUR.PCM       (Full hour sequence :00)
         └── STRIKE.PCM     (Hour strike sound)
 ```
+
+**⚠️ CRITICAL: 8.3 Filename Format**
+- FAT32 SD cards use DOS 8.3 filenames (8 chars + 3 extension)
+- Long filenames are automatically truncated by Windows
+- Use EXACT filenames shown above (with tilde ~ and numbers)
 
 **Audio Format Specifications:**
 - Sample Rate: 16 kHz
@@ -1345,15 +1350,16 @@ mosquitto_pub ... -t "home/Clock_Stani_1/error_log/clear" -m "clear"
    ffmpeg -i input.wav -ar 16000 -ac 1 -f s16le output.pcm
    ```
 
-3. **Upload to SD Card:**
+3. **Upload to SD Card (8.3 Format):**
    ```
    /sdcard/CHIMES/CUSTOM/
-   ├── QUARTER1.PCM
-   ├── QUARTER2.PCM
-   ├── QUARTER3.PCM
-   ├── QUARTER4.PCM
+   ├── QUARTE~1.PCM  (QUARTER_PAST.PCM)
+   ├── HALF_P~1.PCM  (HALF_PAST.PCM)
+   ├── QUARTE~2.PCM  (QUARTER_TO.PCM)
+   ├── HOUR.PCM
    └── STRIKE.PCM
    ```
+   **Note:** Use 8.3 filenames (DOS format) for FAT32 compatibility
 
 4. **Update Code (Advanced):**
    - Modify `chime_manager.c`
