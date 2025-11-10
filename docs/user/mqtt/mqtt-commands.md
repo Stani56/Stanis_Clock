@@ -706,8 +706,55 @@ homeassistant/{component_type}/Clock_Stani_1_{MAC}/entity_name/config
 
 ---
 
+## Troubleshooting Common Issues
+
+### Getting `unknown_command` Response?
+
+**CRITICAL: Command Format Rules**
+- ✅ **All commands use underscores (_), NOT spaces**
+- ✅ **Commands are case-sensitive** (all lowercase)
+- ✅ **Exact spelling required**
+
+**Common Mistakes:**
+
+| Wrong ❌ | Correct ✅ | Issue |
+|---------|-----------|-------|
+| `ota_get version` | `ota_get_version` | Space instead of underscore |
+| `ota get version` | `ota_get_version` | Multiple spaces |
+| `OTA_GET_VERSION` | `ota_get_version` | Uppercase (case-sensitive!) |
+| `chimes volume 75` | `chimes_volume_75` | Space instead of underscore |
+| `set time 14:30` | `set_time 14:30` | Missing underscore in command |
+
+**Debug Steps:**
+1. **Verify command spelling** - Check Quick Command Reference above
+2. **Check for spaces** - Replace all spaces with underscores (except parameters like time)
+3. **Use lowercase** - Commands are case-sensitive
+4. **Monitor MQTT traffic:**
+   ```bash
+   mosquitto_sub -h broker.hivemq.com -p 8883 \
+     --cafile /etc/ssl/certs/ca-certificates.crt \
+     -u StaniWirdWild -P ClockWirdWild \
+     -t "home/Clock_Stani_1/#" -v
+   ```
+5. **Check serial logs** - Look for: `"Unknown command: 'YOUR_COMMAND'"`
+
+**Example of Correct Usage:**
+```bash
+# ✅ CORRECT - with underscore
+mosquitto_pub -h broker.hivemq.com -p 8883 \
+  --cafile /etc/ssl/certs/ca-certificates.crt \
+  -u StaniWirdWild -P ClockWirdWild \
+  -t "home/Clock_Stani_1/command" -m "ota_get_version"
+
+# ❌ WRONG - with space
+mosquitto_pub ... -m "ota_get version"  # Returns unknown_command
+```
+
+---
+
 ## Related Documentation
 
+- **[MQTT Command Audit](../../developer/mqtt-command-audit.md)** - Complete command list verified against code
 - [MQTT System Architecture](../../implementation/mqtt/mqtt-system-architecture.md)
 - [Home Assistant MQTT Discovery](https://www.home-assistant.io/integrations/mqtt/)
 - [Phase 2.3 Westminster Chimes](../../implementation/phase-2.3-ha-chime-controls.md)
