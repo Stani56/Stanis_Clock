@@ -47,18 +47,18 @@ typedef struct {
 #define CHIME_DEFAULT_QUIET_START   22      // 10 PM
 #define CHIME_DEFAULT_QUIET_END     7       // 7 AM
 #define CHIME_DEFAULT_VOLUME        80      // 80%
-#define CHIME_DEFAULT_SET           "WESTMINSTER"  // Uppercase to match Windows FAT32
+#define CHIME_DEFAULT_SET           "WESTMINSTER"  // Uppercase by convention
 
 /**
  * @brief SD card chime file paths
- * Note: Using 8.3 short filenames to match Windows FAT32 behavior
- * Windows truncates long filenames: QUARTER_PAST.PCM -> QUARTE~1.PCM
+ * Note: Using long filenames with UTF-8 encoding support
+ * FAT32 is case-insensitive but case-preserving (UPPERCASE used by convention)
  */
 #define CHIME_BASE_PATH             "/sdcard/CHIMES"
-#define CHIME_DIR_NAME              "WESTMI~1"        // WESTMINSTER -> WESTMI~1
-#define CHIME_QUARTER_PAST_FILE     "QUARTE~1.PCM"   // QUARTER_PAST.PCM
-#define CHIME_HALF_PAST_FILE        "HALF_P~1.PCM"   // HALF_PAST.PCM
-#define CHIME_QUARTER_TO_FILE       "QUARTE~2.PCM"   // QUARTER_TO.PCM
+#define CHIME_DIR_NAME              "WESTMINSTER"         // Long filename support
+#define CHIME_QUARTER_PAST_FILE     "QUARTER_PAST.PCM"   // Long filename
+#define CHIME_HALF_PAST_FILE        "HALF_PAST.PCM"      // Long filename
+#define CHIME_QUARTER_TO_FILE       "QUARTER_TO.PCM"     // Long filename
 #define CHIME_HOUR_FILE             "HOUR.PCM"
 #define CHIME_STRIKE_FILE           "STRIKE.PCM"
 
