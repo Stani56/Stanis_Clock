@@ -3,7 +3,7 @@
   "title": "Phase 2.4: FAT32 Long Filename Support",
   "description": "Enable user-friendly long filenames for Westminster chimes. Replaces cryptic 8.3 DOS format (WESTMI~1) with readable names (WESTMINSTER). BREAKING CHANGE: Requires SD card reorganization with new long filenames.",
   "release_date": "2025-11-11",
-  "firmware_url": "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin",
+  "firmware_url": "https://pub-3ef23ec5bae14629b323217785443321.r2.dev/wordclock.bin",
   "firmware_size": 1330352,
   "commit_hash": "2f520eab3ff7242db467b7472f234c466e5e59f6",
   "changes": [

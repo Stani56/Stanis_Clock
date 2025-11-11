@@ -83,10 +83,10 @@ typedef struct {
 } ota_config_t;
 
 // Default configuration
-// GitHub URLs for production OTA updates
-// NOTE: Using raw URLs due to GitHub release asset authentication issues
-#define OTA_DEFAULT_FIRMWARE_URL "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin"
-#define OTA_DEFAULT_VERSION_URL  "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/version.json"
+// Cloudflare R2 URLs for production OTA updates
+// NOTE: Using Cloudflare R2 due to GitHub account authentication requirements
+#define OTA_DEFAULT_FIRMWARE_URL "https://pub-3ef23ec5bae14629b323217785443321.r2.dev/wordclock.bin"
+#define OTA_DEFAULT_VERSION_URL  "https://pub-3ef23ec5bae14629b323217785443321.r2.dev/version.json"
 #define OTA_DEFAULT_TIMEOUT_MS   120000  // 2 minutes
 
 /**
