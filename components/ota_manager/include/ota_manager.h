@@ -21,6 +21,14 @@ extern "C" {
 #endif
 
 /**
+ * @brief OTA firmware source selection
+ */
+typedef enum {
+    OTA_SOURCE_GITHUB = 0,        ///< GitHub raw URLs (default)
+    OTA_SOURCE_CLOUDFLARE = 1     ///< Cloudflare R2 CDN
+} ota_source_t;
+
+/**
  * @brief OTA update states
  */
 typedef enum {
@@ -82,12 +90,18 @@ typedef struct {
     bool skip_version_check;      ///< Skip version comparison (force update)
 } ota_config_t;
 
+// OTA Source URLs - Dual source support with automatic failover
+// GitHub URLs (primary source - automatically updated on git push)
+#define OTA_GITHUB_FIRMWARE_URL "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin"
+#define OTA_GITHUB_VERSION_URL  "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/version.json"
+
+// Cloudflare R2 URLs (backup source - manual upload required)
+#define OTA_CLOUDFLARE_FIRMWARE_URL "https://pub-3ef23ec5bae14629b323217785443321.r2.dev/wordclock.bin"
+#define OTA_CLOUDFLARE_VERSION_URL  "https://pub-3ef23ec5bae14629b323217785443321.r2.dev/version.json"
+
 // Default configuration
-// Cloudflare R2 URLs for production OTA updates
-// NOTE: Using Cloudflare R2 due to GitHub account authentication requirements
-#define OTA_DEFAULT_FIRMWARE_URL "https://pub-3ef23ec5bae14629b323217785443321.r2.dev/wordclock.bin"
-#define OTA_DEFAULT_VERSION_URL  "https://pub-3ef23ec5bae14629b323217785443321.r2.dev/version.json"
-#define OTA_DEFAULT_TIMEOUT_MS   120000  // 2 minutes
+#define OTA_DEFAULT_SOURCE       OTA_SOURCE_GITHUB  // Default to GitHub
+#define OTA_DEFAULT_TIMEOUT_MS   120000             // 2 minutes
 
 /**
  * @brief Initialize OTA manager
@@ -262,6 +276,51 @@ esp_err_t ota_perform_health_checks(void);
  * @return Error description string
  */
 const char* ota_error_to_string(ota_error_t error);
+
+/**
+ * @brief Set preferred OTA firmware source
+ *
+ * Stores the preferred source in NVS. System will use this source
+ * by default, with automatic failover to alternate source if download fails.
+ *
+ * @param source OTA_SOURCE_GITHUB or OTA_SOURCE_CLOUDFLARE
+ * @return ESP_OK on success
+ *         ESP_ERR_INVALID_ARG if source is invalid
+ *         ESP_FAIL on NVS write error
+ */
+esp_err_t ota_set_source(ota_source_t source);
+
+/**
+ * @brief Get preferred OTA firmware source
+ *
+ * Reads the stored preference from NVS.
+ * Returns OTA_DEFAULT_SOURCE if no preference is stored.
+ *
+ * @return Current preferred OTA source
+ */
+ota_source_t ota_get_source(void);
+
+/**
+ * @brief Get OTA source as string
+ *
+ * Converts ota_source_t enum to human-readable string.
+ *
+ * @param source OTA source enum value
+ * @return "github" or "cloudflare"
+ */
+const char* ota_source_to_string(ota_source_t source);
+
+/**
+ * @brief Parse OTA source from string
+ *
+ * Converts string to ota_source_t enum.
+ *
+ * @param source_str String "github" or "cloudflare"
+ * @param[out] source Pointer to store parsed source
+ * @return ESP_OK on success
+ *         ESP_ERR_INVALID_ARG if string is invalid
+ */
+esp_err_t ota_source_from_string(const char *source_str, ota_source_t *source);
 
 #ifdef __cplusplus
 }

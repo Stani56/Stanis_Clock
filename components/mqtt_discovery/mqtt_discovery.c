@@ -930,7 +930,40 @@ esp_err_t mqtt_discovery_publish_selects(void)
             if (ret != ESP_OK) return ret;
         }
     }
-    
+
+    // OTA Firmware Source Selection
+    {
+        cJSON *config = cJSON_CreateObject();
+        if (config) {
+            add_base_topic(config);
+            cJSON_AddStringToObject(config, "name", "Z0. System: OTA Firmware Source");
+            snprintf(unique_id, sizeof(unique_id), "%s_ota_source", discovery_config.device_id);
+            cJSON_AddStringToObject(config, "unique_id", unique_id);
+            cJSON_AddStringToObject(config, "state_topic", "~/ota/source/status");
+            cJSON_AddStringToObject(config, "command_topic", "~/ota/source/set");
+            cJSON_AddStringToObject(config, "value_template", "{{ value_json.source }}");
+            cJSON_AddStringToObject(config, "command_template", "{\"source\": \"{{ value }}\"}");
+
+            cJSON *options = cJSON_CreateArray();
+            if (options) {
+                cJSON_AddItemToArray(options, cJSON_CreateString("github"));
+                cJSON_AddItemToArray(options, cJSON_CreateString("cloudflare"));
+                cJSON_AddItemToObject(config, "options", options);
+            }
+
+            cJSON_AddStringToObject(config, "icon", "mdi:cloud-download");
+            cJSON_AddStringToObject(config, "entity_category", "config");
+            cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+            cJSON *device = create_device_json();
+            if (device) cJSON_AddItemToObject(config, "device", device);
+
+            ret = publish_discovery_config("select", "ota_source", config, true);
+            cJSON_Delete(config);
+            if (ret != ESP_OK) return ret;
+        }
+    }
+
     return ret;
 }
 

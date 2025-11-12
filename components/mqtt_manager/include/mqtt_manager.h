@@ -50,6 +50,8 @@ extern "C" {
 #define MQTT_TOPIC_ERROR_LOG_RESPONSE MQTT_TOPIC_BASE "/error_log/response"
 #define MQTT_TOPIC_ERROR_LOG_STATS MQTT_TOPIC_BASE "/error_log/stats"
 #define MQTT_TOPIC_ERROR_LOG_CLEAR MQTT_TOPIC_BASE "/error_log/clear"
+#define MQTT_TOPIC_OTA_SOURCE_SET MQTT_TOPIC_BASE "/ota/source/set"
+#define MQTT_TOPIC_OTA_SOURCE_STATUS MQTT_TOPIC_BASE "/ota/source/status"
 
 // MQTT Status Messages
 #define MQTT_STATUS_ONLINE "online"
@@ -109,6 +111,9 @@ esp_err_t mqtt_publish_validation_mismatches(const char *json_payload);
 // Error Log Functions
 esp_err_t mqtt_publish_error_log_response(const char *json_payload);
 esp_err_t mqtt_publish_error_log_stats(const char *json_payload);
+
+// OTA Source Functions
+esp_err_t mqtt_publish_ota_source_status(const char *json_payload);
 
 // Configuration Functions
 esp_err_t mqtt_load_config(mqtt_config_t *config);

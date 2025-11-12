@@ -63,6 +63,7 @@ static struct {
 #define NVS_NAMESPACE       "ota_manager"
 #define NVS_KEY_BOOT_COUNT  "boot_count"
 #define NVS_KEY_FIRST_BOOT  "first_boot"
+#define NVS_KEY_OTA_SOURCE  "ota_source"
 
 // Health check configuration
 #define OTA_HEALTH_CHECK_DELAY_MS          30000  // 30s grace period for system stabilization
@@ -73,6 +74,7 @@ static struct {
 // Forward declarations
 static void ota_task(void *pvParameters);
 static void ota_health_check_task(void *pvParameters);
+static void get_urls_for_source(ota_source_t source, const char **firmware_url, const char **version_url);
 
 //=============================================================================
 // Helper Functions
@@ -343,10 +345,22 @@ esp_err_t ota_check_for_updates(firmware_version_t *available_version)
         .data_len = 0
     };
 
+    // Get preferred OTA source and URLs
+    ota_source_t preferred_source = ota_get_source();
+    ota_source_t fallback_source = (preferred_source == OTA_SOURCE_GITHUB) ?
+                                    OTA_SOURCE_CLOUDFLARE : OTA_SOURCE_GITHUB;
+
+    const char *firmware_url, *version_url;
+    get_urls_for_source(preferred_source, &firmware_url, &version_url);
+
+    ESP_LOGI(TAG, "Checking for updates from %s (fallback: %s)",
+             ota_source_to_string(preferred_source),
+             ota_source_to_string(fallback_source));
+
     // Configure HTTP client for version check with custom event handler
     // Use ESP-IDF's built-in certificate bundle (includes GitHub's root CA)
     esp_http_client_config_t config = {
-        .url = OTA_DEFAULT_VERSION_URL,
+        .url = version_url,
         .crt_bundle_attach = esp_crt_bundle_attach,  // Use ESP-IDF cert bundle
         .event_handler = version_check_event_handler, // Custom handler captures data
         .user_data = &output_buffer,                   // Pass buffer to handler
@@ -377,8 +391,36 @@ esp_err_t ota_check_for_updates(firmware_version_t *available_version)
     ESP_LOGI(TAG, "HTTP GET Status = %d, content_length = %d, captured = %d bytes, err = %s",
              status, content_length, output_buffer.data_len, esp_err_to_name(err));
 
+    // Try failover if preferred source failed
+    if (!(err == ESP_OK && status == 200 && output_buffer.data_len > 0)) {
+        ESP_LOGW(TAG, "Failed to fetch from %s (status=%d), trying fallback: %s",
+                 ota_source_to_string(preferred_source), status,
+                 ota_source_to_string(fallback_source));
+
+        // Clean up previous client
+        esp_http_client_cleanup(client);
+
+        // Reset buffer for second attempt
+        output_buffer.data_len = 0;
+
+        // Get fallback URLs
+        get_urls_for_source(fallback_source, &firmware_url, &version_url);
+        config.url = version_url;
+
+        // Try fallback source
+        client = esp_http_client_init(&config);
+        if (client != NULL) {
+            err = esp_http_client_perform(client);
+            status = esp_http_client_get_status_code(client);
+            content_length = esp_http_client_get_content_length(client);
+
+            ESP_LOGI(TAG, "Fallback HTTP GET Status = %d, content_length = %d, captured = %d bytes",
+                     status, content_length, output_buffer.data_len);
+        }
+    }
+
     if (err == ESP_OK && status == 200 && output_buffer.data_len > 0) {
-        // Data was captured by event handler
+        // Data was captured by event handler (from either primary or fallback)
         ESP_LOGI(TAG, "Successfully received version data");
 
         // Parse JSON
@@ -627,14 +669,18 @@ esp_err_t ota_start_update(const ota_config_t *config)
         return ESP_FAIL;
     }
 
-    // Use default config if not provided
-    static ota_config_t default_config = {
-        .firmware_url = OTA_DEFAULT_FIRMWARE_URL,
-        .version_url = OTA_DEFAULT_VERSION_URL,
-        .auto_reboot = true,
-        .timeout_ms = OTA_DEFAULT_TIMEOUT_MS,
-        .skip_version_check = false
-    };
+    // Get URLs from preferred OTA source
+    ota_source_t preferred_source = ota_get_source();
+    const char *firmware_url, *version_url;
+    get_urls_for_source(preferred_source, &firmware_url, &version_url);
+
+    // Use default config if not provided (with dynamically selected URLs)
+    static ota_config_t default_config;
+    default_config.firmware_url = firmware_url;
+    default_config.version_url = version_url;
+    default_config.auto_reboot = true;
+    default_config.timeout_ms = OTA_DEFAULT_TIMEOUT_MS;
+    default_config.skip_version_check = false;
 
     if (config == NULL) {
         config = &default_config;
@@ -955,6 +1001,133 @@ const char* ota_error_to_string(ota_error_t error)
         case OTA_ERROR_LOW_MEMORY:          return "Insufficient memory";
         case OTA_ERROR_ALREADY_RUNNING:     return "Update already in progress";
         default:                            return "Unknown error";
+    }
+}
+
+//=============================================================================
+// OTA Source Management (Dual Source Support)
+//=============================================================================
+
+/**
+ * @brief Set preferred OTA firmware source
+ */
+esp_err_t ota_set_source(ota_source_t source)
+{
+    if (source != OTA_SOURCE_GITHUB && source != OTA_SOURCE_CLOUDFLARE) {
+        ESP_LOGE(TAG, "Invalid OTA source: %d", source);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open NVS namespace: %s", esp_err_to_name(err));
+        return ESP_FAIL;
+    }
+
+    err = nvs_set_u8(nvs_handle, NVS_KEY_OTA_SOURCE, (uint8_t)source);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to write OTA source to NVS: %s", esp_err_to_name(err));
+        nvs_close(nvs_handle);
+        return ESP_FAIL;
+    }
+
+    err = nvs_commit(nvs_handle);
+    nvs_close(nvs_handle);
+
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "OTA source set to: %s", ota_source_to_string(source));
+    } else {
+        ESP_LOGE(TAG, "Failed to commit OTA source to NVS: %s", esp_err_to_name(err));
+    }
+
+    return err;
+}
+
+/**
+ * @brief Get preferred OTA firmware source
+ */
+ota_source_t ota_get_source(void)
+{
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to open NVS namespace, using default source");
+        return OTA_DEFAULT_SOURCE;
+    }
+
+    uint8_t source_val = OTA_DEFAULT_SOURCE;
+    err = nvs_get_u8(nvs_handle, NVS_KEY_OTA_SOURCE, &source_val);
+    nvs_close(nvs_handle);
+
+    if (err != ESP_OK) {
+        ESP_LOGD(TAG, "No stored OTA source preference, using default");
+        return OTA_DEFAULT_SOURCE;
+    }
+
+    // Validate stored value
+    if (source_val != OTA_SOURCE_GITHUB && source_val != OTA_SOURCE_CLOUDFLARE) {
+        ESP_LOGW(TAG, "Invalid stored OTA source (%d), using default", source_val);
+        return OTA_DEFAULT_SOURCE;
+    }
+
+    return (ota_source_t)source_val;
+}
+
+/**
+ * @brief Get OTA source as string
+ */
+const char* ota_source_to_string(ota_source_t source)
+{
+    switch (source) {
+        case OTA_SOURCE_GITHUB:     return "github";
+        case OTA_SOURCE_CLOUDFLARE: return "cloudflare";
+        default:                    return "unknown";
+    }
+}
+
+/**
+ * @brief Parse OTA source from string
+ */
+esp_err_t ota_source_from_string(const char *source_str, ota_source_t *source)
+{
+    if (source_str == NULL || source == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (strcasecmp(source_str, "github") == 0) {
+        *source = OTA_SOURCE_GITHUB;
+        return ESP_OK;
+    } else if (strcasecmp(source_str, "cloudflare") == 0) {
+        *source = OTA_SOURCE_CLOUDFLARE;
+        return ESP_OK;
+    }
+
+    ESP_LOGE(TAG, "Invalid OTA source string: %s", source_str);
+    return ESP_ERR_INVALID_ARG;
+}
+
+/**
+ * @brief Get URLs for specified OTA source
+ */
+static void get_urls_for_source(ota_source_t source, const char **firmware_url, const char **version_url)
+{
+    switch (source) {
+        case OTA_SOURCE_GITHUB:
+            *firmware_url = OTA_GITHUB_FIRMWARE_URL;
+            *version_url = OTA_GITHUB_VERSION_URL;
+            ESP_LOGI(TAG, "Using GitHub URLs");
+            break;
+        case OTA_SOURCE_CLOUDFLARE:
+            *firmware_url = OTA_CLOUDFLARE_FIRMWARE_URL;
+            *version_url = OTA_CLOUDFLARE_VERSION_URL;
+            ESP_LOGI(TAG, "Using Cloudflare R2 URLs");
+            break;
+        default:
+            *firmware_url = OTA_GITHUB_FIRMWARE_URL;
+            *version_url = OTA_GITHUB_VERSION_URL;
+            ESP_LOGW(TAG, "Unknown source, defaulting to GitHub");
+            break;
     }
 }
 

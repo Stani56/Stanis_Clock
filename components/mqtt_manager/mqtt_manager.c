@@ -387,6 +387,16 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event
                 ESP_LOGW(TAG, "⚠️ Failed to publish OTA version info");
             }
 
+            // Publish OTA source preference (dual source support - Phase 2.4)
+            ESP_LOGI(TAG, "📝 Publishing OTA source status...");
+            extern esp_err_t publish_ota_source_status(void);
+            esp_err_t ota_source_ret = publish_ota_source_status();
+            if (ota_source_ret == ESP_OK) {
+                ESP_LOGI(TAG, "✅ OTA source status published");
+            } else {
+                ESP_LOGW(TAG, "⚠️ Failed to publish OTA source status");
+            }
+
             // Publish initial error log statistics
             extern esp_err_t handle_error_log_stats_request(void);
             handle_error_log_stats_request();
@@ -458,6 +468,10 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event
                 ESP_LOGI(TAG, "=== ERROR LOG CLEAR REQUESTED ===");
                 extern esp_err_t handle_error_log_clear(const char *payload, int payload_len);
                 handle_error_log_clear(event->data, event->data_len);
+            } else if (strncmp(event->topic, MQTT_TOPIC_OTA_SOURCE_SET, strlen(MQTT_TOPIC_OTA_SOURCE_SET)) == 0) {
+                ESP_LOGI(TAG, "=== OTA SOURCE CHANGE REQUESTED ===");
+                extern esp_err_t handle_ota_source_set(const char *payload, int payload_len);
+                handle_ota_source_set(event->data, event->data_len);
             }
             break;
             
@@ -2032,6 +2046,14 @@ esp_err_t mqtt_subscribe_to_topics(void) {
         ESP_LOGI(TAG, "✅ Subscribed to error log clear: %s", MQTT_TOPIC_ERROR_LOG_CLEAR);
     }
 
+    // Subscribe to OTA source set
+    ret = esp_mqtt_client_subscribe(mqtt_client, MQTT_TOPIC_OTA_SOURCE_SET, 1);
+    if (ret == -1) {
+        ESP_LOGW(TAG, "Failed to subscribe to OTA source set topic");
+    } else {
+        ESP_LOGI(TAG, "✅ Subscribed to OTA source set: %s", MQTT_TOPIC_OTA_SOURCE_SET);
+    }
+
     ESP_LOGI(TAG, "Subscribed to all MQTT control topics");
     return ESP_OK;
 }
@@ -2171,6 +2193,17 @@ esp_err_t mqtt_publish_error_log_stats(const char *json_payload) {
     int msg_id = esp_mqtt_client_publish(mqtt_client, MQTT_TOPIC_ERROR_LOG_STATS, json_payload, 0, 1, true);
     if (msg_id != -1) {
         ESP_LOGI(TAG, "📤 Published error log statistics");
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
+
+esp_err_t mqtt_publish_ota_source_status(const char *json_payload) {
+    if (!thread_safe_get_mqtt_connected()) return ESP_ERR_INVALID_STATE;
+
+    int msg_id = esp_mqtt_client_publish(mqtt_client, MQTT_TOPIC_OTA_SOURCE_STATUS, json_payload, 0, 1, true);
+    if (msg_id != -1) {
+        ESP_LOGI(TAG, "📤 Published OTA source status");
         return ESP_OK;
     }
     return ESP_FAIL;
