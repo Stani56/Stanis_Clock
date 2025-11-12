@@ -77,6 +77,7 @@ typedef struct {
     char build_date[16];          ///< Build date (e.g., "2025-11-07")
     char idf_version[16];         ///< ESP-IDF version (e.g., "5.4.2")
     uint32_t size_bytes;          ///< Firmware size in bytes
+    char sha256[65];              ///< SHA-256 checksum (64 hex chars + null terminator)
 } firmware_version_t;
 
 /**

@@ -24,6 +24,8 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "cJSON.h"
+#include "mbedtls/sha256.h"
+#include "esp_partition.h"
 #include <string.h>
 #include <sys/time.h>
 
@@ -48,6 +50,7 @@ static struct {
     uint32_t start_time_ms;
     SemaphoreHandle_t mutex;
     bool initialized;
+    char expected_sha256[65];  // Expected SHA-256 from version.json (64 hex chars + null)
 } ota_context = {
     .state = OTA_STATE_IDLE,
     .error = OTA_ERROR_NONE,
@@ -56,7 +59,8 @@ static struct {
     .total_bytes = 0,
     .start_time_ms = 0,
     .mutex = NULL,
-    .initialized = false
+    .initialized = false,
+    .expected_sha256 = ""
 };
 
 // NVS keys for OTA state
@@ -88,6 +92,72 @@ static uint32_t get_time_ms(void)
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
+}
+
+/**
+ * @brief Calculate SHA-256 checksum of OTA partition
+ *
+ * @param partition Partition to calculate checksum for
+ * @param sha256_hex Output buffer for hex string (65 bytes minimum)
+ * @return ESP_OK on success, error otherwise
+ */
+static esp_err_t calculate_partition_sha256(const esp_partition_t *partition, char *sha256_hex)
+{
+    if (!partition || !sha256_hex) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    ESP_LOGI(TAG, "Calculating SHA-256 checksum of partition...");
+
+    unsigned char sha256_output[32];  // SHA-256 produces 32 bytes
+    mbedtls_sha256_context ctx;
+    mbedtls_sha256_init(&ctx);
+    mbedtls_sha256_starts(&ctx, 0);  // 0 = SHA-256 (not SHA-224)
+
+    const size_t CHUNK_SIZE = 4096;  // Read 4KB at a time
+    uint8_t *buffer = malloc(CHUNK_SIZE);
+    if (!buffer) {
+        ESP_LOGE(TAG, "Failed to allocate buffer for SHA-256 calculation");
+        mbedtls_sha256_free(&ctx);
+        return ESP_ERR_NO_MEM;
+    }
+
+    size_t offset = 0;
+    size_t partition_size = partition->size;
+
+    while (offset < partition_size) {
+        size_t read_size = (partition_size - offset > CHUNK_SIZE) ? CHUNK_SIZE : (partition_size - offset);
+
+        esp_err_t ret = esp_partition_read(partition, offset, buffer, read_size);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to read partition at offset %zu: %s", offset, esp_err_to_name(ret));
+            free(buffer);
+            mbedtls_sha256_free(&ctx);
+            return ret;
+        }
+
+        mbedtls_sha256_update(&ctx, buffer, read_size);
+        offset += read_size;
+
+        // Log progress every 100KB
+        if (offset % (100 * 1024) == 0 || offset == partition_size) {
+            ESP_LOGD(TAG, "SHA-256 progress: %zu / %zu bytes (%.1f%%)",
+                     offset, partition_size, (offset * 100.0f) / partition_size);
+        }
+    }
+
+    mbedtls_sha256_finish(&ctx, sha256_output);
+    mbedtls_sha256_free(&ctx);
+    free(buffer);
+
+    // Convert binary hash to hex string
+    for (int i = 0; i < 32; i++) {
+        sprintf(&sha256_hex[i * 2], "%02x", sha256_output[i]);
+    }
+    sha256_hex[64] = '\0';
+
+    ESP_LOGI(TAG, "SHA-256 calculated: %.16s...", sha256_hex);
+    return ESP_OK;
 }
 
 /**
@@ -271,6 +341,10 @@ esp_err_t ota_get_current_version(firmware_version_t *version)
     const esp_partition_t *running = esp_ota_get_running_partition();
     version->size_bytes = running ? running->size : 0;
 
+    // Current running firmware doesn't have SHA-256 stored (would need to calculate)
+    // For now, leave empty since it's primarily used for downloaded firmware verification
+    version->sha256[0] = '\0';
+
     ESP_LOGI(TAG, "Current firmware: %s (built %s, IDF %s)",
              version->version, version->build_date, version->idf_version);
 
@@ -433,9 +507,10 @@ esp_err_t ota_check_for_updates(firmware_version_t *available_version)
             cJSON *version_obj = cJSON_GetObjectItem(json, "version");
             cJSON *date_obj = cJSON_GetObjectItem(json, "build_date");
             cJSON *size_obj = cJSON_GetObjectItem(json, "size_bytes");
+            cJSON *sha256_obj = cJSON_GetObjectItem(json, "sha256");
 
-            ESP_LOGI(TAG, "JSON fields: version=%p, date=%p, size=%p",
-                    version_obj, date_obj, size_obj);
+            ESP_LOGI(TAG, "JSON fields: version=%p, date=%p, size=%p, sha256=%p",
+                    version_obj, date_obj, size_obj, sha256_obj);
 
             if (version_obj && date_obj) {
                 strncpy(available_version->version, version_obj->valuestring,
@@ -447,6 +522,17 @@ esp_err_t ota_check_for_updates(firmware_version_t *available_version)
                 available_version->build_date[sizeof(available_version->build_date) - 1] = '\0';
 
                 available_version->size_bytes = size_obj ? size_obj->valueint : 0;
+
+                // Parse SHA-256 checksum if available
+                if (sha256_obj && cJSON_IsString(sha256_obj)) {
+                    strncpy(available_version->sha256, sha256_obj->valuestring,
+                            sizeof(available_version->sha256) - 1);
+                    available_version->sha256[sizeof(available_version->sha256) - 1] = '\0';
+                    ESP_LOGI(TAG, "SHA-256 checksum: %.16s...", available_version->sha256);
+                } else {
+                    available_version->sha256[0] = '\0';  // Empty string = no checksum
+                    ESP_LOGW(TAG, "No SHA-256 checksum in version.json");
+                }
 
                 // Compare versions (semver-aware, handles git describe format)
                 firmware_version_t current;
@@ -616,6 +702,55 @@ static void ota_task(void *pvParameters)
     }
 
     ESP_LOGI(TAG, "✅ Image validation passed (already checked app descriptor)");
+
+    // SHA-256 verification (if checksum was provided in version.json)
+    char expected_sha256[65];
+    if (xSemaphoreTake(ota_context.mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        strncpy(expected_sha256, ota_context.expected_sha256, sizeof(expected_sha256));
+        xSemaphoreGive(ota_context.mutex);
+    }
+
+    if (expected_sha256[0] != '\0') {
+        ESP_LOGI(TAG, "🔐 Verifying firmware SHA-256 checksum...");
+
+        // Get the partition that was just written to (the next OTA partition)
+        const esp_partition_t *update_partition = esp_ota_get_next_update_partition(NULL);
+        if (update_partition == NULL) {
+            ESP_LOGE(TAG, "❌ Failed to get update partition");
+            esp_https_ota_abort(https_ota_handle);
+            update_state(OTA_STATE_FAILED, OTA_ERROR_FLASH_FAILED);
+            vTaskDelete(NULL);
+            return;
+        }
+
+        // Calculate actual SHA-256 of downloaded firmware
+        char actual_sha256[65];
+        ret = calculate_partition_sha256(update_partition, actual_sha256);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "❌ Failed to calculate SHA-256: %s", esp_err_to_name(ret));
+            esp_https_ota_abort(https_ota_handle);
+            update_state(OTA_STATE_FAILED, OTA_ERROR_CHECKSUM_MISMATCH);
+            vTaskDelete(NULL);
+            return;
+        }
+
+        // Compare checksums (case-insensitive)
+        if (strcasecmp(expected_sha256, actual_sha256) != 0) {
+            ESP_LOGE(TAG, "❌ SHA-256 CHECKSUM MISMATCH!");
+            ESP_LOGE(TAG, "   Expected: %s", expected_sha256);
+            ESP_LOGE(TAG, "   Actual:   %s", actual_sha256);
+            esp_https_ota_abort(https_ota_handle);
+            update_state(OTA_STATE_FAILED, OTA_ERROR_CHECKSUM_MISMATCH);
+            vTaskDelete(NULL);
+            return;
+        }
+
+        ESP_LOGI(TAG, "✅ SHA-256 verification passed");
+        ESP_LOGI(TAG, "   Checksum: %.16s...", actual_sha256);
+    } else {
+        ESP_LOGW(TAG, "⚠️ Skipping SHA-256 verification (no checksum in version.json)");
+    }
+
     update_state(OTA_STATE_FLASHING, OTA_ERROR_NONE);
 
     // Finish OTA (this sets boot partition)
@@ -697,6 +832,25 @@ esp_err_t ota_start_update(const ota_config_t *config)
         } else if (ret != ESP_OK) {
             ESP_LOGE(TAG, "Failed to check for updates");
             return ESP_FAIL;
+        }
+
+        // Store expected SHA-256 for verification after download
+        if (xSemaphoreTake(ota_context.mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            strncpy(ota_context.expected_sha256, available.sha256, sizeof(ota_context.expected_sha256) - 1);
+            ota_context.expected_sha256[sizeof(ota_context.expected_sha256) - 1] = '\0';
+            xSemaphoreGive(ota_context.mutex);
+
+            if (available.sha256[0] != '\0') {
+                ESP_LOGI(TAG, "Expected firmware SHA-256: %.16s...", available.sha256);
+            } else {
+                ESP_LOGW(TAG, "No SHA-256 checksum available - verification will be skipped");
+            }
+        }
+    } else {
+        // If skipping version check, clear expected SHA-256
+        if (xSemaphoreTake(ota_context.mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            ota_context.expected_sha256[0] = '\0';
+            xSemaphoreGive(ota_context.mutex);
         }
     }
 
