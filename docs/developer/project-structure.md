@@ -1,9 +1,10 @@
 # Project Structure
 
-**Last Updated:** November 2025
-**Platform:** ESP32 Baseline (Audio Disabled)
+**Last Updated:** November 2025 (Post SHA-256 Verification Implementation)
+**Platform:** ESP32-S3 (YB-ESP32-S3-AMP) - Production Hardware
+**Status:** Phase 2.4 Complete - Multi-board Support + Audio + Westminster Chimes + OTA
 
-This document describes the architecture and organization of the ESP32 German Word Clock project after the November 2025 cleanup and restructuring.
+This document describes the architecture and organization of the ESP32-S3 German Word Clock project after the November 2025 OTA automation and SHA-256 verification implementation.
 
 ## 📁 Repository Layout
 
@@ -13,9 +14,11 @@ Stanis_Clock/
 ├── 📄 CLAUDE.md                    # Developer reference (quick technical guide)
 ├── 📄 Mqtt_User_Guide.md           # MQTT command reference
 ├── 📄 LICENSE                      # MIT License
-├── 📄 partitions.csv               # Flash partition table (4MB)
+├── 📄 partitions.csv               # Flash partition table (8MB, dual OTA)
 ├── 📄 sdkconfig                    # ESP-IDF configuration
 ├── 📄 CMakeLists.txt               # Top-level build configuration
+├── 📄 post_build_ota.sh            # ⭐ NEW: Post-build automation (SHA-256 + version.json)
+├── 📄 Makefile                     # ⭐ NEW: Build convenience wrapper
 │
 ├── 📁 main/                        # ESP-IDF main application
 │   ├── wordclock.c                 # Core application logic (397 lines)
@@ -27,27 +30,36 @@ Stanis_Clock/
 │   ├── wordclock_error_log_mqtt.c/h # Error log MQTT integration
 │   └── wordclock_mqtt_control.h    # MQTT command definitions
 │
-├── 📁 components/                  # ESP-IDF components (26 total)
+├── 📁 ota_files/                   # ⭐ OTA firmware distribution directory
+│   ├── wordclock.bin               # Compiled firmware binary
+│   ├── wordclock.bin.sha256        # SHA-256 checksum file
+│   └── version.json                # Firmware metadata with SHA-256
+│
+├── 📁 components/                  # ESP-IDF components (30 total)
 │   │
-│   ├── 📁 Hardware Layer (6 components)
+│   ├── 📁 Hardware Layer (9 components)
+│   │   ├── board_config/          # ⭐ Multi-board hardware abstraction (YB-AMP vs DevKitC)
 │   │   ├── i2c_devices/           # TLC59116 LED controllers + DS3231 RTC
 │   │   ├── adc_manager/           # Potentiometer input
 │   │   ├── light_sensor/          # BH1750 ambient light
 │   │   ├── button_manager/        # Reset button handling
 │   │   ├── status_led_manager/    # Network status indicators
-│   │   ├── external_flash/        # W25Q64 8MB SPI flash driver (OPTIONAL)
-│   │   └── filesystem_manager/    # LittleFS on external flash (OPTIONAL)
+│   │   ├── audio_manager/         # ⭐ I2S audio output (MAX98357A) - ACTIVE on ESP32-S3
+│   │   ├── sdcard_manager/        # ⭐ SD card storage (SPI mode) - ACTIVE on ESP32-S3
+│   │   ├── external_flash/        # W25Q64 8MB SPI flash driver (OPTIONAL, archived)
+│   │   └── filesystem_manager/    # LittleFS on external flash (OPTIONAL, archived)
 │   │
 │   ├── 📁 Display Layer (3 components)
 │   │   ├── wordclock_display/     # German word logic + LED matrix
 │   │   ├── wordclock_time/        # Time calculation + grammar
 │   │   └── transition_manager/    # Smooth LED animations (20Hz)
 │   │
-│   ├── 📁 Network Layer (5 components)
+│   ├── 📁 Network Layer (6 components)
 │   │   ├── wifi_manager/          # Auto-connect + AP mode
 │   │   ├── ntp_manager/           # Vienna timezone sync
-│   │   ├── mqtt_manager/          # HiveMQ Cloud TLS client
+│   │   ├── mqtt_manager/          # HiveMQ Cloud TLS client + Dual OTA source control
 │   │   ├── mqtt_discovery/        # Home Assistant integration (36 entities)
+│   │   ├── ota_manager/           # ⭐ OTA updates with SHA-256 verification
 │   │   └── web_server/            # WiFi configuration interface
 │   │
 │   ├── 📁 MQTT Tier 1 Components (3 components)
@@ -55,28 +67,32 @@ Stanis_Clock/
 │   │   ├── mqtt_command_processor/     # Structured commands
 │   │   └── mqtt_message_persistence/   # Reliable delivery
 │   │
-│   ├── 📁 System Services (5 components)
-│   │   ├── nvs_manager/           # Credential storage
+│   ├── 📁 System Services (6 components)
+│   │   ├── nvs_manager/           # Credential storage + OTA source preference
 │   │   ├── system_init/           # System initialization
 │   │   ├── brightness_config/     # 5-zone adaptive brightness
 │   │   ├── transition_config/     # Animation configuration
 │   │   ├── error_log_manager/     # Persistent error logging (50 entries)
 │   │   └── led_validation/        # LED hardware validation system
 │   │
-│   └── 📁 Audio Components (DISABLED - 2 components)
-│       ├── audio_manager/         # Audio playback (NOT INITIALIZED on ESP32)
-│       └── chime_library/         # Chime audio library (NOT USED on ESP32)
+│   └── 📁 Audio Components (2 components - ⭐ ACTIVE on ESP32-S3)
+│       ├── chime_manager/         # Westminster chimes scheduler (Quarter/Half/Hour strikes)
+│       └── chime_library/         # Chime audio library (PCM playback from SD card)
 │
 └── 📁 docs/                        # Comprehensive documentation
     ├── README.md                   # Documentation navigation
     ├── user/                       # End-user guides
     ├── developer/                  # Developer documentation
+    │   ├── api-reference.md       # ⭐ UPDATED: All 30 components documented
+    │   ├── post-build-automation-guide.md  # ⭐ NEW: OTA automation workflow
+    │   └── project-structure.md   # This file
     ├── implementation/             # Technical deep-dives
     │   ├── mqtt/                  # MQTT system docs
     │   ├── led-validation/        # LED validation system
-    │   └── esp32-s3-migration/    # ESP32-S3 upgrade guide
+    │   └── esp32-s3-migration/    # ESP32-S3 upgrade guide (complete)
     ├── proposals/                  # Feature proposals
     ├── technical/                  # Technical analysis
+    │   └── dual-ota-source-system.md  # ⭐ NEW: Dual OTA architecture
     ├── testing/                    # Testing procedures
     ├── maintenance/                # Operations & maintenance
     └── archive/                    # Historical documentation
@@ -84,27 +100,31 @@ Stanis_Clock/
 
 ## 🏗️ Software Architecture
 
-### Component Structure (26 Components)
+### Component Structure (30 Components)
 
-**Hardware Layer (7 components):**
+**Hardware Layer (9 components):**
+- `board_config` - ⭐ Multi-board hardware abstraction (YB-AMP vs DevKitC-1)
 - `i2c_devices` - TLC59116 LED controllers + DS3231 RTC
 - `adc_manager` - Potentiometer input
 - `light_sensor` - BH1750 ambient light
 - `button_manager` - Reset button handling
 - `status_led_manager` - Network status indicators
-- `external_flash` - W25Q64 8MB SPI flash driver (OPTIONAL, Phase 1 complete)
-- `filesystem_manager` - LittleFS on external flash (OPTIONAL, Phase 1 complete)
+- `audio_manager` - ⭐ I2S audio output (MAX98357A) - ACTIVE on ESP32-S3
+- `sdcard_manager` - ⭐ SD card storage (SPI mode) - ACTIVE on ESP32-S3
+- `external_flash` - W25Q64 8MB SPI flash driver (OPTIONAL, archived)
+- `filesystem_manager` - LittleFS on external flash (OPTIONAL, archived)
 
 **Display Layer (3 components):**
 - `wordclock_display` - German word logic + LED matrix
 - `wordclock_time` - Time calculation + grammar
 - `transition_manager` - Smooth LED animations (20Hz)
 
-**Network Layer (5 components):**
+**Network Layer (6 components):**
 - `wifi_manager` - Auto-connect + AP mode
 - `ntp_manager` - Vienna timezone sync
-- `mqtt_manager` - HiveMQ Cloud TLS client
+- `mqtt_manager` - HiveMQ Cloud TLS client + Dual OTA source control
 - `mqtt_discovery` - Home Assistant integration (36 entities)
+- `ota_manager` - ⭐ OTA updates with SHA-256 firmware verification
 - `web_server` - WiFi configuration interface
 
 **MQTT Tier 1 Components (3 components):**
@@ -120,11 +140,11 @@ Stanis_Clock/
 - `error_log_manager` - Persistent error logging (50 entries)
 - `led_validation` - LED hardware validation system
 
-**Audio Components (2 components - DISABLED on ESP32):**
-- `audio_manager` - Audio playback (code present but NOT initialized)
-- `chime_library` - Chime audio library (code present but NOT used)
+**Audio Components (2 components - ⭐ ACTIVE on ESP32-S3):**
+- `chime_manager` - Westminster chimes scheduler (Quarter/Half/Hour strikes)
+- `chime_library` - Chime audio library (PCM playback from SD card)
 
-> **Note:** Audio components are present in the codebase but not initialized on ESP32 due to WiFi+MQTT+I2S hardware conflicts. They will be re-enabled on ESP32-S3 hardware. See [ESP32-S3 Migration Analysis](../implementation/esp32-s3-migration/ESP32-S3-Migration-Analysis.md).
+> **Note:** Audio components are fully operational on ESP32-S3 hardware with concurrent WiFi+MQTT+I2S support. Westminster chimes play from SD card at Quarter Past, Half Past, Quarter To, and on the Hour. See [Post-Build Automation Guide](../developer/post-build-automation-guide.md) for firmware deployment.
 
 ### Architectural Layers
 
@@ -136,6 +156,7 @@ Stanis_Clock/
 ├───────────────────────────────────────────────────┤
 │         IoT Integration Layer                     │
 │  WiFi, NTP, MQTT, Home Assistant Discovery       │
+│  ⭐ OTA Manager (SHA-256 firmware verification)   │
 ├───────────────────────────────────────────────────┤
 │         MQTT Tier 1 (Production Features)         │
 │  Schema validation, Command processor, Persistence│
@@ -146,8 +167,11 @@ Stanis_Clock/
 │         Control Layer                             │
 │  Display, Transitions, Brightness, LED validation│
 ├───────────────────────────────────────────────────┤
+│         Media Layer (ESP32-S3)                    │
+│  ⭐ Audio Manager, Chime Manager, SD Card        │
+├───────────────────────────────────────────────────┤
 │         Hardware Layer                            │
-│  I2C devices, Sensors, GPIO, External flash      │
+│  ⭐ Board Config, I2C devices, Sensors, GPIO      │
 └───────────────────────────────────────────────────┘
 ```
 
@@ -165,11 +189,18 @@ Stanis_Clock/
 
 ### Hardware Components
 
+#### board_config ⭐ NEW
+- **Multi-board hardware abstraction** for YB-ESP32-S3-AMP and ESP32-S3-DevKitC-1
+- **GPIO mapping** - Configures different pins for each board variant
+- **PSRAM configuration** - Quad SPI (YB-AMP) vs Octal SPI (DevKitC)
+- **Feature detection** - Integrated vs external peripherals
+- **Build-time selection** via CONFIG_BOARD_DEVKITC define
+
 #### i2c_devices
 - **10× TLC59116 LED controllers** @ 0x60-0x6A (160 LEDs total)
 - **DS3231 RTC** @ 0x68
 - **BH1750 light sensor** @ 0x23
-- **Two I2C buses:** Bus 0 (GPIO 25/26) for LEDs, Bus 1 (GPIO 18/19) for sensors
+- **Two I2C buses:** Bus 0 (GPIO 8/9) for LEDs, Bus 1 (GPIO 1/42) for sensors (YB-AMP)
 - **I2C Speed:** 100kHz (conservative for 10-device reliability)
 
 #### external_flash (OPTIONAL)
@@ -183,7 +214,63 @@ Stanis_Clock/
 - Mount point: `/storage`
 - Auto-created directories: `/storage/chimes`, `/storage/config`
 - Wear leveling, power-loss protection
-- Status: Phase 1 complete (Oct 2025)
+- Status: Phase 1 complete (Oct 2025), archived in favor of SD card
+
+#### audio_manager ⭐ ACTIVE
+- **I2S audio output** via MAX98357A amplifiers
+- **GPIO Configuration:** BCLK=5, LRCLK=6, DIN=7
+- **Sample Rate:** 16kHz, 16-bit mono PCM
+- **Concurrent WiFi+I2S** - ESP32-S3 eliminates hardware conflicts
+- **Status:** Fully operational on ESP32-S3
+
+#### sdcard_manager ⭐ ACTIVE
+- **SD card storage** via SPI interface (GPIO 10/11/12/13)
+- **FatFS filesystem** with long filename support
+- **Mount point:** `/sdcard`
+- **Westminster chime storage:** /sdcard/CHIMES/WESTMINSTER/*.PCM
+- **Status:** Phase 2.2 complete, production-ready
+
+### Network Components
+
+#### ota_manager ⭐ NEW (November 2025)
+- **Dual OTA source support** - GitHub (primary) + Cloudflare R2 (backup)
+- **⭐ SHA-256 firmware verification** - Cryptographic integrity checking
+- **Automatic failover** - Switches to backup source on failure
+- **NVS source preference** - Persists last successful source
+- **MQTT control** - Remote OTA triggering and source management
+- **Security:**
+  - SHA-256 checksum validation before flashing
+  - Detects network corruption and tampering
+  - 2^256 collision resistance
+  - Verification time: 3-5 seconds
+  - Auto-abort on mismatch
+
+#### mqtt_manager (Updated)
+- **HiveMQ Cloud TLS client** with dual OTA source control
+- **New MQTT topics** for OTA source management:
+  - `home/wordclock/ota/source/set` - Set OTA source (github/cloudflare)
+  - `home/wordclock/ota/source/status` - Current source status
+  - `home/wordclock/ota/check` - Trigger update check
+  - `home/wordclock/ota/status` - OTA progress monitoring
+
+### Audio Components (ESP32-S3)
+
+#### chime_manager ⭐ ACTIVE
+- **Westminster chimes scheduler** - Quarter Past, Half Past, Quarter To, On the Hour
+- **PCM playback** - 16kHz 16-bit mono from SD card
+- **File structure:**
+  - QUARTER_PAST.PCM - 15 minutes past
+  - HALF_PAST.PCM - 30 minutes past
+  - QUARTER_TO.PCM - 45 minutes past
+  - HOUR.PCM - On the hour chime
+  - STRIKE.PCM - Hour count (0-12 strikes)
+- **Status:** Phase 2.3 complete, production-ready
+
+#### chime_library
+- **Chime audio library** - PCM playback engine
+- **SD card integration** - Reads from /sdcard/CHIMES/
+- **Audio buffering** - Efficient streaming playback
+- **Status:** Fully operational on ESP32-S3
 
 ### Production Features (Oct 2025)
 
@@ -216,16 +303,20 @@ Stanis_Clock/
 ## 📊 Performance Characteristics
 
 ### Resource Usage
-- **Flash:** 1.2MB application (53% free in 2.5MB partition)
-- **RAM:** ~120KB static + ~60KB heap
-- **Tasks:** 8 concurrent FreeRTOS tasks
-- **Component Count:** 26 ESP-IDF components (24 active, 2 disabled)
+- **Flash:** 1.27MB application (49% free in 2.5MB ota_0 partition)
+- **RAM:** ~160KB static + ~80KB heap (with PSRAM: 2.3MB available)
+- **PSRAM:** 2MB Quad SPI (YB-AMP) or 8MB Octal SPI (DevKitC-1)
+- **Tasks:** 10+ concurrent FreeRTOS tasks (including audio and chime tasks)
+- **Component Count:** 30 ESP-IDF components (28 active, 2 archived)
 
 ### Timing Requirements
 - **LED Updates:** 12-20ms per display update
 - **Animation:** 20Hz (50ms) for smooth transitions
 - **Light Sensor:** 10Hz (100ms) task for instant response
 - **I2C Operations:** 5-25 operations per update (95% reduction via differential updates)
+- **Audio Playback:** 16kHz sample rate, <50ms latency
+- **Chime Scheduling:** Second-precision Westminster chime timing
+- **OTA SHA-256 Verification:** 3-5 seconds (1.3MB firmware)
 
 ### Critical Optimization
 - **I2C Differential Updates:** Only modify changed LEDs (not all 160)
@@ -236,18 +327,37 @@ Stanis_Clock/
 ## 🔧 Build Configuration
 
 ### ESP-IDF Settings
-- **Platform:** ESP32 (esp32 target)
+- **Platform:** ESP32-S3 (esp32s3 target)
 - **ESP-IDF Version:** 5.4.2
-- **Flash Size:** 4MB
-- **Partition Table:** Custom (see partitions.csv)
+- **Flash Size:** 8MB (YB-AMP) or 16MB (DevKitC-1)
+- **Partition Table:** Custom dual-OTA (see partitions.csv)
 - **FreeRTOS Hz:** 1000 (1ms tick rate)
+- **PSRAM:** Quad SPI 2MB (YB-AMP) or Octal SPI 8MB (DevKitC-1)
 
-### Partition Table
+### Partition Table (8MB Flash - YB-ESP32-S3-AMP)
 ```csv
+# ESP32-S3 German Word Clock - OTA-enabled partition table (8MB flash)
 nvs,      data, nvs,     0x9000,  0x6000,
-phy_init, data, phy,     0xf000,  0x1000,
-factory,  app,  factory, 0x10000, 0x280000,  # 2.5MB app
-storage,  data, fat,     0x290000, 0x160000,  # 1.5MB storage
+otadata,  data, ota,     0xf000,  0x2000,    # ⭐ NEW: OTA data partition
+phy_init, data, phy,     0x11000, 0x1000,
+ota_0,    app,  ota_0,   0x20000, 0x280000,  # ⭐ 2.5MB app (primary)
+ota_1,    app,  ota_1,   0x2a0000, 0x280000, # ⭐ 2.5MB app (secondary)
+storage,  data, fat,     0x520000, 0x160000, # 1.5MB storage
+```
+
+### Build Workflow ⭐ NEW
+```bash
+# Traditional build
+idf.py build flash monitor
+
+# Automated OTA release (interactive)
+make ota-prepare
+
+# Automated OTA release (fully automated)
+make ota-release
+
+# Just build
+make build
 ```
 
 ### Component Dependencies
@@ -284,23 +394,34 @@ storage,  data, fat,     0x290000, 0x160000,  # 1.5MB storage
 
 ## 📈 Project Evolution
 
-**Nov 2025: ESP32 Baseline Cleanup**
-- Audio subsystem removed (WiFi+MQTT+I2S conflicts)
-- Documentation reorganized (44 files, 26% reduction)
-- 25 files archived with context preservation
-- Clean, stable baseline for ESP32 hardware
+**Nov 2025: OTA Automation + SHA-256 Verification ⭐**
+- Post-build automation script (SHA-256 + version.json generation)
+- Makefile build convenience wrapper
+- SHA-256 firmware verification in OTA manager
+- Dual OTA source documentation
+- Complete API reference update (30 components)
+- Comprehensive post-build automation guide
+
+**Nov 2025: ESP32-S3 Migration Complete ✅ (Phase 2.4)**
+- YelloByte YB-ESP32-S3-AMP board (production hardware)
+- Multi-board support with board_config abstraction
+- Concurrent WiFi+MQTT+I2S audio playback
+- Westminster chimes from SD card (Phase 2.3)
+- SD card storage with FatFS (Phase 2.2)
+- I2S audio output (Phase 2.1)
+- PSRAM optimization (2.3MB heap vs 303KB on ESP32)
 
 **Oct 2025: Production Features**
 - LED validation system with hardware readback
 - Persistent error logging (50 entries, NVS)
 - TLC59116 auto-increment pointer fix
+- External flash + LittleFS (Phase 1, archived)
 
-**Future: ESP32-S3 Migration**
-- YelloByte YB-ESP32-S3-AMP board
-- Concurrent WiFi+MQTT+I2S support
-- Re-enable audio_manager and chime_library
-- microSD card storage (FatFS migration)
-- See: [ESP32-S3 Migration Analysis](../implementation/esp32-s3-migration/ESP32-S3-Migration-Analysis.md)
+**Legacy: ESP32 Baseline**
+- Tagged as `v1.0-esp32-final`
+- Audio disabled due to hardware conflicts
+- 4MB flash, no PSRAM
+- Stable baseline preserved for reference
 
 ---
 
