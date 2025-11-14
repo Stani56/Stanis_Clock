@@ -516,8 +516,8 @@ void app_main(void)
     // Log system information
     ESP_LOGI(TAG, "================================================");
     ESP_LOGI(TAG, "ESP32 GERMAN WORD CLOCK - PRODUCTION VERSION");
-    ESP_LOGI(TAG, "🚀 Firmware v2.10.5 - Real-Time OTA Progress (Clean Build)");
-    ESP_LOGI(TAG, "✅ NULL Pointer Fix | Live Progress Updates | Clean Git State");
+    ESP_LOGI(TAG, "🚀 Firmware v2.10.6 - OTA Partition Conflict Fixed");
+    ESP_LOGI(TAG, "✅ Live Progress | Correct Flashing | Permanent Solution Documented");
     ESP_LOGI(TAG, "================================================");
     ESP_LOGI(TAG, "ESP-IDF Version: %s", esp_get_idf_version());
     ESP_LOGI(TAG, "Free heap: %ld bytes", esp_get_free_heap_size());
