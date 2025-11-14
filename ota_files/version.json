@@ -1,7 +1,7 @@
 {
   "version": "v2.10.3",
   "title": "Real-Time OTA Progress",
-  "description": "Fixed OTA progress reporting in Home Assistant. Added callback mechanism for real-time progress updates every 5%. Now you can watch the download progress live\!",
+  "description": "Fixed OTA progress reporting in Home Assistant. Added callback mechanism for real-time progress updates every 5%. Now you can watch the download progress live!",
   "release_date": "2025-11-14",
   "firmware_url": "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin",
   "firmware_size": 1337264,
