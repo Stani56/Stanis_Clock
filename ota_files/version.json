@@ -1,38 +1,13 @@
 {
-  "version": "v2.8.0",
-  "title": "Phase 2.4: FAT32 Long Filename Support",
-  "description": "Enable user-friendly long filenames for Westminster chimes. Replaces cryptic 8.3 DOS format (WESTMI~1) with readable names (WESTMINSTER). BREAKING CHANGE: Requires SD card reorganization with new long filenames.",
-  "release_date": "2025-11-11",
-  "firmware_url": "https://pub-3ef23ec5bae14629b323217785443321.r2.dev/wordclock.bin",
-  "firmware_size": 1330352,
-  "commit_hash": "2f520eab3ff7242db467b7472f234c466e5e59f6",
-  "changes": [
-    "Enable FAT32 Long Filename (LFN) support with UTF-8 encoding",
-    "Replace 8.3 filenames: WESTMI~1 → WESTMINSTER, QUARTE~1.PCM → QUARTER_PAST.PCM",
-    "UTF-8 encoding for German characters (ü,ä,ö,ß) and multi-language support",
-    "PSRAM-optimized buffer allocation (saves 1.5 KB internal DRAM)",
-    "Binary size: 1.27 MB (49% partition space free)",
-    "BREAKING CHANGE: SD card directory structure updated - requires reorganization"
-  ],
-  "breaking_changes": [
-    "SD card must be reorganized with long filenames",
-    "Old structure: /sdcard/CHIMES/WESTMI~1/QUARTE~1.PCM",
-    "New structure: /sdcard/CHIMES/WESTMINSTER/QUARTER_PAST.PCM"
-  ],
-  "migration_notes": [
-    "1. Backup existing SD card files",
-    "2. Format SD card as FAT32",
-    "3. Create new directory: /sdcard/CHIMES/WESTMINSTER/",
-    "4. Copy files with new long filenames:",
-    "   - QUARTER_PAST.PCM (was QUARTE~1.PCM)",
-    "   - HALF_PAST.PCM (was HALF_P~1.PCM)",
-    "   - QUARTER_TO.PCM (was QUARTE~2.PCM)",
-    "   - HOUR.PCM (unchanged)",
-    "   - STRIKE.PCM (unchanged)",
-    "5. Case-insensitive: WESTMINSTER = Westminster = westminster"
-  ],
-  "requires_restart": true,
+  "version": "v2.9.0",
+  "title": "Menuconfig Guide + Dual OTA Testing",
+  "description": "Added comprehensive menuconfig board settings guide. Testing dual OTA system with SHA-256 verification.",
+  "release_date": "2025-11-14",
+  "firmware_url": "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin",
+  "firmware_size": 1336432,
+  "sha256": "683b391c81773e15ef4831782f68d1f4accb78dcaed4d07fecc552e2f71efebf",
+  "commit_hash": "5e4dd9c3254916cc2e81897a9b574f78e9e70fe3",
   "esp_idf_version": "5.4.2",
-  "build_date": "2025-11-11T07:33:00Z",
-  "sha256": "e8c726517583ccf54b603d3ffa1a26f2b561cdcaea91ec45904e3b5f3d1d6da1"
+  "build_date": "2025-11-14T12:58:32Z",
+  "requires_restart": true
 }
