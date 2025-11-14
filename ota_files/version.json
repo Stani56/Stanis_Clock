@@ -1,13 +1,13 @@
 {
-  "version": "v2.9.0",
-  "title": "Menuconfig Guide + Dual OTA Testing",
-  "description": "Added comprehensive menuconfig board settings guide. Testing dual OTA system with SHA-256 verification.",
+  "version": "v2.10.0",
+  "title": "OTA Test Release",
+  "description": "Testing dual OTA system with SHA-256 verification. Added version banner to boot logs for OTA verification.",
   "release_date": "2025-11-14",
   "firmware_url": "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin",
-  "firmware_size": 1336432,
-  "sha256": "683b391c81773e15ef4831782f68d1f4accb78dcaed4d07fecc552e2f71efebf",
-  "commit_hash": "5e4dd9c3254916cc2e81897a9b574f78e9e70fe3",
+  "firmware_size": 1336608,
+  "sha256": "3a43bfe7237e63370d537c3d29da396bd2df5eda9df64f046a6c367ba86bec1b",
+  "commit_hash": "51a6b4cefa783b76868676d57a15e58ec0ca3843",
   "esp_idf_version": "5.4.2",
-  "build_date": "2025-11-14T12:58:32Z",
+  "build_date": "2025-11-14T14:39:37Z",
   "requires_restart": true
 }
