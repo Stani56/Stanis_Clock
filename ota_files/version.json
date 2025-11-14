@@ -1,13 +1,13 @@
 {
-  "version": "v2.10.2",
-  "title": "OTA Success Test",
-  "description": "Testing complete OTA workflow with fixed SHA-256 verification (v2.10.1 → v2.10.2). Changed version banner to confirm successful OTA update.",
+  "version": "v2.10.3",
+  "title": "Real-Time OTA Progress",
+  "description": "Fixed OTA progress reporting in Home Assistant. Added callback mechanism for real-time progress updates every 5%. Now you can watch the download progress live\!",
   "release_date": "2025-11-14",
   "firmware_url": "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin",
-  "firmware_size": 1336816,
-  "sha256": "c5f8086e23691ddc6c09ab7ff4dcfcd30e8d9155007d09f7281938d48e642eb1",
-  "commit_hash": "52bf7f0be4a953b3baa57728bd42b5ff8d95a4c1",
+  "firmware_size": 1337264,
+  "sha256": "19cfa59335298b335c0288defcd82bfaffd42ac414ef14ad580dffafdcd7de76",
+  "commit_hash": "18b0b7569e86f15250c35d3473a9a2a39b90d298",
   "esp_idf_version": "5.4.2",
-  "build_date": "2025-11-14T14:56:12Z",
+  "build_date": "2025-11-14T15:24:15Z",
   "requires_restart": true
 }
