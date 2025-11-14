@@ -347,12 +347,40 @@ esp_err_t ota_get_current_version(firmware_version_t *version)
     const esp_partition_t *running = esp_ota_get_running_partition();
     version->size_bytes = running ? running->size : 0;
 
-    // Current running firmware doesn't have SHA-256 stored (would need to calculate)
-    // For now, leave empty since it's primarily used for downloaded firmware verification
-    version->sha256[0] = '\0';
+    // Calculate SHA-256 of running firmware to get binary_hash
+    if (running) {
+        // Read app_desc from partition to get firmware size
+        esp_app_desc_t partition_desc;
+        esp_err_t err = esp_ota_get_partition_description(running, &partition_desc);
+        if (err == ESP_OK) {
+            // Calculate SHA-256 of the firmware image (not entire partition)
+            uint8_t sha256[32];
+            esp_partition_get_sha256(running, sha256);
 
-    ESP_LOGI(TAG, "Current firmware: %s (built %s, IDF %s)",
-             version->version, version->build_date, version->idf_version);
+            // Convert to hex string
+            for (int i = 0; i < 32; i++) {
+                sprintf(&version->sha256[i * 2], "%02x", sha256[i]);
+            }
+            version->sha256[64] = '\0';
+
+            // Extract first 8 chars as binary_hash
+            strncpy(version->binary_hash, version->sha256, 8);
+            version->binary_hash[8] = '\0';
+
+            ESP_LOGI(TAG, "Current firmware: %s (built %s, IDF %s, binary_hash: %s)",
+                     version->version, version->build_date, version->idf_version,
+                     version->binary_hash);
+        } else {
+            version->sha256[0] = '\0';
+            version->binary_hash[0] = '\0';
+            ESP_LOGW(TAG, "Could not calculate SHA-256 for running firmware");
+        }
+    } else {
+        version->sha256[0] = '\0';
+        version->binary_hash[0] = '\0';
+        ESP_LOGI(TAG, "Current firmware: %s (built %s, IDF %s)",
+                 version->version, version->build_date, version->idf_version);
+    }
 
     return ESP_OK;
 }
@@ -534,32 +562,57 @@ esp_err_t ota_check_for_updates(firmware_version_t *available_version)
                     strncpy(available_version->sha256, sha256_obj->valuestring,
                             sizeof(available_version->sha256) - 1);
                     available_version->sha256[sizeof(available_version->sha256) - 1] = '\0';
-                    ESP_LOGI(TAG, "SHA-256 checksum: %.16s...", available_version->sha256);
+
+                    // Extract first 8 chars as binary_hash
+                    strncpy(available_version->binary_hash, available_version->sha256, 8);
+                    available_version->binary_hash[8] = '\0';
+
+                    ESP_LOGI(TAG, "SHA-256: %.16s..., binary_hash: %s",
+                            available_version->sha256, available_version->binary_hash);
                 } else {
                     available_version->sha256[0] = '\0';  // Empty string = no checksum
+                    available_version->binary_hash[0] = '\0';
                     ESP_LOGW(TAG, "No SHA-256 checksum in version.json");
                 }
 
-                // Compare versions (semver-aware, handles git describe format)
+                // Get current firmware info
                 firmware_version_t current;
                 ota_get_current_version(&current);
 
-                int version_cmp = compare_versions(current.version, available_version->version);
-                if (version_cmp < 0) {
-                    // Current version is older than available version
-                    ESP_LOGI(TAG, "Update available: %s → %s",
-                            current.version, available_version->version);
-                    ret = ESP_OK;
-                } else if (version_cmp == 0) {
-                    // Versions are equal (same major.minor.patch)
-                    ESP_LOGI(TAG, "Already running latest version: %s (available: %s)",
-                            current.version, available_version->version);
-                    ret = ESP_ERR_NOT_FOUND;
+                // Compare binary_hash FIRST (most reliable indicator of binary change)
+                if (current.binary_hash[0] != '\0' && available_version->binary_hash[0] != '\0') {
+                    if (strcmp(current.binary_hash, available_version->binary_hash) == 0) {
+                        // Binary hashes match - same firmware binary
+                        ESP_LOGI(TAG, "Already running same firmware binary (hash: %s, version: %s)",
+                                current.binary_hash, current.version);
+                        ret = ESP_ERR_NOT_FOUND;
+                    } else {
+                        // Binary hashes differ - different firmware binary
+                        ESP_LOGI(TAG, "Update available: Binary changed (%s → %s), version %s → %s",
+                                current.binary_hash, available_version->binary_hash,
+                                current.version, available_version->version);
+                        ret = ESP_OK;
+                    }
                 } else {
-                    // Current version is NEWER than available (dev build?)
-                    ESP_LOGW(TAG, "Current version %s is NEWER than available %s (development build?)",
-                            current.version, available_version->version);
-                    ret = ESP_ERR_NOT_FOUND;
+                    // Fallback to version comparison if binary_hash not available
+                    ESP_LOGW(TAG, "Binary hash not available, falling back to version comparison");
+                    int version_cmp = compare_versions(current.version, available_version->version);
+                    if (version_cmp < 0) {
+                        // Current version is older than available version
+                        ESP_LOGI(TAG, "Update available: %s → %s",
+                                current.version, available_version->version);
+                        ret = ESP_OK;
+                    } else if (version_cmp == 0) {
+                        // Versions are equal (same major.minor.patch)
+                        ESP_LOGI(TAG, "Already running latest version: %s (available: %s)",
+                                current.version, available_version->version);
+                        ret = ESP_ERR_NOT_FOUND;
+                    } else {
+                        // Current version is NEWER than available (dev build?)
+                        ESP_LOGW(TAG, "Current version %s is NEWER than available %s (development build?)",
+                                current.version, available_version->version);
+                        ret = ESP_ERR_NOT_FOUND;
+                    }
                 }
             } else {
                 ESP_LOGE(TAG, "Missing required JSON fields (version or build_date)");

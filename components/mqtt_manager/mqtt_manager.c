@@ -2415,12 +2415,14 @@ esp_err_t mqtt_publish_ota_version(void) {
     }
 
     cJSON_AddStringToObject(json, "current_version", current.version);
+    cJSON_AddStringToObject(json, "current_binary_hash", current.binary_hash);
     cJSON_AddStringToObject(json, "current_build_date", current.build_date);
     cJSON_AddStringToObject(json, "current_idf_version", current.idf_version);
     cJSON_AddNumberToObject(json, "current_size_bytes", current.size_bytes);
 
     if (update_available) {
         cJSON_AddStringToObject(json, "available_version", available.version);
+        cJSON_AddStringToObject(json, "available_binary_hash", available.binary_hash);
         cJSON_AddStringToObject(json, "available_build_date", available.build_date);
         cJSON_AddNumberToObject(json, "available_size_bytes", available.size_bytes);
     }

@@ -73,7 +73,8 @@ typedef struct {
  * @brief Firmware version information
  */
 typedef struct {
-    char version[32];             ///< Version string (e.g., "v2.3.1")
+    char version[32];             ///< Version string (e.g., "2.11.0")
+    char binary_hash[9];          ///< First 8 chars of binary SHA-256 + null terminator
     char build_date[16];          ///< Build date (e.g., "2025-11-07")
     char idf_version[16];         ///< ESP-IDF version (e.g., "5.4.2")
     uint32_t size_bytes;          ///< Firmware size in bytes

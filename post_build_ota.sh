@@ -184,9 +184,46 @@ echo ""
 
 print_header "Step 2: Calculate SHA-256 Checksums"
 
+# Calculate new firmware SHA-256
+NEW_FIRMWARE_SHA256=$(shasum -a 256 "$FIRMWARE_BIN" | cut -d' ' -f1)
+print_success "New firmware SHA-256: $NEW_FIRMWARE_SHA256"
+
+# Check if firmware binary changed since last deployment
+BINARY_CHANGED=true
+if [ -f "$OTA_DIR/wordclock.bin.sha256" ]; then
+    OLD_FIRMWARE_SHA256=$(cut -d' ' -f1 "$OTA_DIR/wordclock.bin.sha256")
+    if [ "$OLD_FIRMWARE_SHA256" = "$NEW_FIRMWARE_SHA256" ]; then
+        BINARY_CHANGED=false
+        print_info "Binary unchanged (hash: ${NEW_FIRMWARE_SHA256:0:8}...)"
+        echo ""
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${YELLOW}ℹ️  Firmware binary has NOT changed${NC}"
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${YELLOW}Current binary hash: ${OLD_FIRMWARE_SHA256:0:8}...${NC}"
+        echo -e "${YELLOW}New binary hash:     ${NEW_FIRMWARE_SHA256:0:8}...${NC}"
+        echo -e "${YELLOW}${NC}"
+        echo -e "${YELLOW}No need to deploy OTA update unless you want to force it.${NC}"
+        echo -e "${YELLOW}Version changes without binary changes are for documentation only.${NC}"
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+
+        if [ "$AUTO_PUSH" = false ]; then
+            echo -n "Continue with deployment anyway? [y/N]: "
+            read -r CONFIRM
+            if [[ ! $CONFIRM =~ ^[Yy]$ ]]; then
+                print_info "Deployment cancelled (binary unchanged)"
+                exit 0
+            fi
+        fi
+    else
+        print_success "Binary changed! Old: ${OLD_FIRMWARE_SHA256:0:8}..., New: ${NEW_FIRMWARE_SHA256:0:8}..."
+    fi
+else
+    print_info "First deployment (no previous binary found)"
+fi
+
 cd "$OTA_DIR"
-FIRMWARE_SHA256=$(shasum -a 256 wordclock.bin | cut -d' ' -f1)
-print_success "Firmware SHA-256: $FIRMWARE_SHA256"
+FIRMWARE_SHA256="$NEW_FIRMWARE_SHA256"
 
 # Save checksum to file for verification
 echo "$FIRMWARE_SHA256  wordclock.bin" > wordclock.bin.sha256
@@ -227,18 +264,37 @@ print_success "ESP-IDF version: $ESP_IDF_VERSION"
 
 print_header "Step 4: Version Information"
 
+# Read current version from version.txt
+CURRENT_VERSION=""
+if [ -f "$PROJECT_ROOT/version.txt" ]; then
+    CURRENT_VERSION=$(cat "$PROJECT_ROOT/version.txt" | tr -d '\n')
+    print_info "Current version (version.txt): $CURRENT_VERSION"
+fi
+
+# If binary changed, suggest updating version.txt
+if [ "$BINARY_CHANGED" = true ] && [ -n "$CURRENT_VERSION" ]; then
+    echo ""
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}⚠️  Binary changed - Consider updating version.txt${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}Current version: $CURRENT_VERSION${NC}"
+    echo -e "${YELLOW}${NC}"
+    echo -e "${YELLOW}Update version.txt before deployment to avoid confusion.${NC}"
+    echo -e "${YELLOW}Version only needs to change when binary changes.${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+fi
+
 # If version not provided via command line, prompt user
 if [ -z "$VERSION" ]; then
-    # Read current version from version.json if it exists
-    if [ -f "$VERSION_JSON" ] && [ "$JQ_AVAILABLE" = true ]; then
-        CURRENT_VERSION=$(jq -r '.version' "$VERSION_JSON")
-        print_info "Current version: $CURRENT_VERSION"
-    fi
-
-    echo -n "Enter new version (e.g., v2.8.1): "
+    echo -n "Enter new version (e.g., 2.11.0) [${CURRENT_VERSION}]: "
     read VERSION
 
-    if [ -z "$VERSION" ]; then
+    # Use current version if user pressed enter
+    if [ -z "$VERSION" ] && [ -n "$CURRENT_VERSION" ]; then
+        VERSION="$CURRENT_VERSION"
+        print_info "Using current version: $VERSION"
+    elif [ -z "$VERSION" ]; then
         print_error "Version is required"
         exit 1
     fi
