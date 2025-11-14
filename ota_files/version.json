@@ -1,13 +1,13 @@
 {
-  "version": "v2.10.8",
-  "title": "Clean v2.10.8 Build",
-  "description": "Tag at correct commit. Device running v2.10.7-1 will update to v2.10.8. Tests real-time progress reporting and partition switching (ota_0 to ota_1).",
+  "version": "v2.10.9",
+  "title": "Force Update Feature",
+  "description": "Added ota_force_update command to bypass version checks. Tests partition ping-pong: ota_0 (factory) -> ota_1 (0x2a0000). Real-time progress reporting enabled.",
   "release_date": "2025-11-14",
   "firmware_url": "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin",
-  "firmware_size": 1337328,
-  "sha256": "9a32827767d40d886e6e89deabea97de7310e2326c834a135f83910f02a95e2d",
-  "commit_hash": "1e5ec8530df4397c1fe786c996e9b5a6b41b7314",
+  "firmware_size": 1337472,
+  "sha256": "d3ecc44b5a9d748eeb5c2f2751068cb4e16ea6e9fe8738bb756880959b71292b",
+  "commit_hash": "aad15569be8d72be8df9442212dabfa1a1a910b7",
   "esp_idf_version": "5.4.2",
-  "build_date": "2025-11-14T17:40:00Z",
+  "build_date": "2025-11-14T18:00:00Z",
   "requires_restart": true
 }
