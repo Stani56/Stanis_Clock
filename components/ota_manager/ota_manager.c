@@ -579,40 +579,55 @@ esp_err_t ota_check_for_updates(firmware_version_t *available_version)
                 firmware_version_t current;
                 ota_get_current_version(&current);
 
-                // Compare binary_hash FIRST (most reliable indicator of binary change)
-                if (current.binary_hash[0] != '\0' && available_version->binary_hash[0] != '\0') {
-                    if (strcmp(current.binary_hash, available_version->binary_hash) == 0) {
-                        // Binary hashes match - same firmware binary
-                        ESP_LOGI(TAG, "Already running same firmware binary (hash: %s, version: %s)",
-                                current.binary_hash, current.version);
-                        ret = ESP_ERR_NOT_FOUND;
+                // STEP 1: Compare VERSIONS first (semver logic, blocks downgrades)
+                int version_cmp = compare_versions(current.version, available_version->version);
+
+                if (version_cmp < 0) {
+                    // Current version is OLDER than available - update is available
+                    ESP_LOGI(TAG, "Update available: %s → %s (newer version)",
+                            current.version, available_version->version);
+
+                    // STEP 2: Check binary_hash to avoid redundant downloads
+                    if (current.binary_hash[0] != '\0' && available_version->binary_hash[0] != '\0') {
+                        if (strcmp(current.binary_hash, available_version->binary_hash) == 0) {
+                            // Same binary hash - we already have this exact firmware
+                            ESP_LOGW(TAG, "Already have this firmware binary (hash: %s), skipping download",
+                                    current.binary_hash);
+                            ESP_LOGW(TAG, "This can happen if you re-flashed same binary with different version number");
+                            ret = ESP_ERR_NOT_FOUND;
+                        } else {
+                            // Different binary - proceed with update
+                            ESP_LOGI(TAG, "Binary hash differs (%s → %s), update needed",
+                                    current.binary_hash, available_version->binary_hash);
+                            ret = ESP_OK;
+                        }
                     } else {
-                        // Binary hashes differ - different firmware binary
-                        ESP_LOGI(TAG, "Update available: Binary changed (%s → %s), version %s → %s",
-                                current.binary_hash, available_version->binary_hash,
-                                current.version, available_version->version);
+                        // Binary hash not available - proceed with update based on version
+                        ESP_LOGI(TAG, "Binary hash not available, proceeding with update based on version");
                         ret = ESP_OK;
                     }
+
+                } else if (version_cmp == 0) {
+                    // Versions are EQUAL - no update needed
+                    ESP_LOGI(TAG, "Already running same version: %s", current.version);
+
+                    // Check if binary hash differs (rebuild without version bump)
+                    if (current.binary_hash[0] != '\0' && available_version->binary_hash[0] != '\0') {
+                        if (strcmp(current.binary_hash, available_version->binary_hash) != 0) {
+                            ESP_LOGW(TAG, "Binary hash differs (%s vs %s) but version is same!",
+                                    current.binary_hash, available_version->binary_hash);
+                            ESP_LOGW(TAG, "This indicates a rebuild without version increment - NOT recommended");
+                            ESP_LOGW(TAG, "Update version.txt when binary changes to avoid confusion");
+                        }
+                    }
+                    ret = ESP_ERR_NOT_FOUND;
+
                 } else {
-                    // Fallback to version comparison if binary_hash not available
-                    ESP_LOGW(TAG, "Binary hash not available, falling back to version comparison");
-                    int version_cmp = compare_versions(current.version, available_version->version);
-                    if (version_cmp < 0) {
-                        // Current version is older than available version
-                        ESP_LOGI(TAG, "Update available: %s → %s",
-                                current.version, available_version->version);
-                        ret = ESP_OK;
-                    } else if (version_cmp == 0) {
-                        // Versions are equal (same major.minor.patch)
-                        ESP_LOGI(TAG, "Already running latest version: %s (available: %s)",
-                                current.version, available_version->version);
-                        ret = ESP_ERR_NOT_FOUND;
-                    } else {
-                        // Current version is NEWER than available (dev build?)
-                        ESP_LOGW(TAG, "Current version %s is NEWER than available %s (development build?)",
-                                current.version, available_version->version);
-                        ret = ESP_ERR_NOT_FOUND;
-                    }
+                    // Current version is NEWER than available - block downgrade
+                    ESP_LOGW(TAG, "Current version %s is NEWER than available %s - blocking downgrade",
+                            current.version, available_version->version);
+                    ESP_LOGW(TAG, "Use 'ota_force_update' command to force downgrade if needed");
+                    ret = ESP_ERR_NOT_FOUND;
                 }
             } else {
                 ESP_LOGE(TAG, "Missing required JSON fields (version or build_date)");
