@@ -166,6 +166,18 @@ cp -v "$FIRMWARE_BIN" "$OTA_DIR/wordclock.bin"
 FIRMWARE_SIZE=$(stat -c%s "$OTA_DIR/wordclock.bin" 2>/dev/null || stat -f%z "$OTA_DIR/wordclock.bin")
 print_success "Copied firmware ($(numfmt --to=iec-i --suffix=B $FIRMWARE_SIZE 2>/dev/null || echo "$FIRMWARE_SIZE bytes"))"
 
+# SHA-256 verification reminder (prevent v2.10.0 bug recurrence)
+echo ""
+echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YELLOW}⚠️  IMPORTANT: SHA-256 Verification${NC}"
+echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YELLOW}Before deploying, ALWAYS test SHA-256 calculation:${NC}"
+echo -e "${BLUE}  make ota-test${NC}"
+echo -e "${YELLOW}This prevents OTA failures like the v2.10.0 bug.${NC}"
+echo -e "${YELLOW}See: docs/archive/bug-reports/v2.10.0-sha256-mismatch.md${NC}"
+echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
 ################################################################################
 # Step 2: Calculate SHA-256 Checksums
 ################################################################################

@@ -15,8 +15,9 @@ help:
 	@echo "  make fullclean       - Full clean (including config)"
 	@echo ""
 	@echo "OTA Release Workflow:"
+	@echo "  make ota-test        - Test SHA-256 calculation locally"
 	@echo "  make ota-prepare     - Prepare OTA files (interactive)"
-	@echo "  make ota-release     - Build + prepare + auto-push to GitHub"
+	@echo "  make ota-release     - Build + test + prepare + auto-push"
 	@echo ""
 	@echo "Testing:"
 	@echo "  make test            - Run unit tests (if available)"
@@ -48,13 +49,18 @@ clean:
 fullclean:
 	idf.py fullclean
 
+# Test OTA SHA-256 calculation locally
+ota-test:
+	@echo "Testing OTA SHA-256 calculation..."
+	./scripts/test_ota_locally.sh
+
 # Prepare OTA files (interactive mode)
 ota-prepare: build
 	@echo "Preparing OTA files..."
 	./post_build_ota.sh
 
-# Build and release OTA (automated mode)
-ota-release: build
+# Build and release OTA (automated mode with safety check)
+ota-release: build ota-test
 	@echo "Building and releasing OTA update..."
 	./post_build_ota.sh --auto-push
 

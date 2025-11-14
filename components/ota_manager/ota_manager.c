@@ -51,6 +51,7 @@ static struct {
     SemaphoreHandle_t mutex;
     bool initialized;
     char expected_sha256[65];  // Expected SHA-256 from version.json (64 hex chars + null)
+    ota_progress_callback_t progress_callback;  // Optional progress callback
 } ota_context = {
     .state = OTA_STATE_IDLE,
     .error = OTA_ERROR_NONE,
@@ -60,7 +61,8 @@ static struct {
     .start_time_ms = 0,
     .mutex = NULL,
     .initialized = false,
-    .expected_sha256 = ""
+    .expected_sha256 = "",
+    .progress_callback = NULL
 };
 
 // NVS keys for OTA state
@@ -674,14 +676,27 @@ static void ota_task(void *pvParameters)
             return;
         }
 
-        // Log progress every 10%
-        static uint8_t last_progress = 0;
-        if (ota_context.progress_percent >= last_progress + 10) {
-            last_progress = ota_context.progress_percent;
+        // Log progress every 10% and call callback every 5%
+        static uint8_t last_progress_log = 0;
+        static uint8_t last_progress_callback = 0;
+
+        if (ota_context.progress_percent >= last_progress_log + 10) {
+            last_progress_log = ota_context.progress_percent;
             ESP_LOGI(TAG, "📊 Progress: %d%% (%lu / %lu bytes)",
                     ota_context.progress_percent,
                     ota_context.bytes_downloaded,
                     ota_context.total_bytes);
+        }
+
+        // Call progress callback every 5% if configured
+        if (ota_context.progress_callback &&
+            ota_context.progress_percent >= last_progress_callback + 5) {
+            last_progress_callback = ota_context.progress_percent;
+
+            ota_progress_t progress;
+            if (ota_get_progress(&progress) == ESP_OK) {
+                ota_context.progress_callback(&progress);
+            }
         }
     }
 
@@ -837,9 +852,16 @@ esp_err_t ota_start_update(const ota_config_t *config)
     default_config.auto_reboot = true;
     default_config.timeout_ms = OTA_DEFAULT_TIMEOUT_MS;
     default_config.skip_version_check = false;
+    default_config.progress_callback = NULL;
 
     if (config == NULL) {
         config = &default_config;
+    }
+
+    // Store progress callback in OTA context (thread-safe)
+    if (xSemaphoreTake(ota_context.mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        ota_context.progress_callback = config->progress_callback;
+        xSemaphoreGive(ota_context.mutex);
     }
 
     // Version check (unless skipped)

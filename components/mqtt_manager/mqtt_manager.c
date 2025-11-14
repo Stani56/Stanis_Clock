@@ -80,6 +80,9 @@ static esp_err_t register_wordclock_schemas(void);
 static esp_err_t register_wordclock_commands(void);
 static esp_err_t mqtt_handle_structured_command(const char* topic, const char* payload, int payload_len);
 
+// OTA progress callback for real-time updates
+static void mqtt_ota_progress_callback(const ota_progress_t *progress);
+
 // NVS write protection timer callback
 static void config_write_timer_callback(TimerHandle_t xTimer) {
     if (config_write_pending) {
@@ -1111,10 +1114,29 @@ static esp_err_t mqtt_handle_command(const char* payload, int payload_len) {
     else if (strcmp(command, "ota_start_update") == 0) {
         ESP_LOGI(TAG, "🚀 Starting OTA firmware update...");
 
-        esp_err_t ret = ota_start_update_default();
+        // Get URLs from current OTA source
+        ota_source_t source = ota_get_source();
+        const char *firmware_url = (source == OTA_SOURCE_GITHUB)
+            ? OTA_GITHUB_FIRMWARE_URL
+            : OTA_CLOUDFLARE_FIRMWARE_URL;
+        const char *version_url = (source == OTA_SOURCE_GITHUB)
+            ? OTA_GITHUB_VERSION_URL
+            : OTA_CLOUDFLARE_VERSION_URL;
+
+        // Configure OTA with progress callback for real-time MQTT updates
+        ota_config_t ota_cfg = {
+            .firmware_url = firmware_url,
+            .version_url = version_url,
+            .auto_reboot = true,
+            .timeout_ms = OTA_DEFAULT_TIMEOUT_MS,
+            .skip_version_check = false,
+            .progress_callback = mqtt_ota_progress_callback  // Real-time progress updates
+        };
+
+        esp_err_t ret = ota_start_update(&ota_cfg);
 
         if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "✅ OTA update started");
+            ESP_LOGI(TAG, "✅ OTA update started with real-time progress reporting");
             mqtt_publish_status("ota_update_started");
             mqtt_publish_ota_progress();  // Initial progress
         } else if (ret == ESP_ERR_INVALID_STATE) {
@@ -2418,6 +2440,64 @@ esp_err_t mqtt_publish_ota_version(void) {
 
     cJSON_Delete(json);
     return ESP_FAIL;
+}
+
+/**
+ * @brief OTA progress callback for real-time MQTT updates
+ *
+ * Called by OTA manager during download (every ~5% progress).
+ * Publishes progress to MQTT for Home Assistant display.
+ *
+ * @param progress Current OTA progress information
+ */
+static void mqtt_ota_progress_callback(const ota_progress_t *progress)
+{
+    if (progress == NULL) {
+        return;
+    }
+
+    // Only publish if MQTT is connected
+    if (!thread_safe_get_mqtt_connected()) {
+        return;
+    }
+
+    // Build JSON payload inline (avoid calling mqtt_publish_ota_progress to prevent recursion)
+    cJSON *json = cJSON_CreateObject();
+    if (json == NULL) {
+        return;
+    }
+
+    // Map state to string
+    const char *state_str = "downloading";
+    switch (progress->state) {
+        case OTA_STATE_IDLE:        state_str = "idle"; break;
+        case OTA_STATE_CHECKING:    state_str = "checking"; break;
+        case OTA_STATE_DOWNLOADING: state_str = "downloading"; break;
+        case OTA_STATE_VERIFYING:   state_str = "verifying"; break;
+        case OTA_STATE_FLASHING:    state_str = "flashing"; break;
+        case OTA_STATE_COMPLETE:    state_str = "complete"; break;
+        case OTA_STATE_FAILED:      state_str = "failed"; break;
+    }
+
+    cJSON_AddStringToObject(json, "state", state_str);
+    cJSON_AddNumberToObject(json, "progress_percent", progress->progress_percent);
+    cJSON_AddNumberToObject(json, "bytes_downloaded", progress->bytes_downloaded);
+    cJSON_AddNumberToObject(json, "total_bytes", progress->total_bytes);
+    cJSON_AddNumberToObject(json, "time_elapsed_ms", progress->time_elapsed_ms);
+    cJSON_AddNumberToObject(json, "time_remaining_ms", progress->time_remaining_ms);
+
+    char *json_string = cJSON_PrintUnformatted(json);
+    if (json_string) {
+        char topic[128];
+        snprintf(topic, sizeof(topic), "home/%s/ota/progress", MQTT_DEVICE_NAME);
+
+        esp_mqtt_client_publish(mqtt_client, topic, json_string, 0, 1, false);
+        free(json_string);
+
+        ESP_LOGD(TAG, "📊 OTA progress published: %d%%", progress->progress_percent);
+    }
+
+    cJSON_Delete(json);
 }
 
 /**

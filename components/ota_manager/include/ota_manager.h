@@ -81,6 +81,16 @@ typedef struct {
 } firmware_version_t;
 
 /**
+ * @brief OTA progress callback function type
+ *
+ * Called periodically during download to report progress.
+ * Can be used to publish progress to MQTT, update UI, etc.
+ *
+ * @param progress Current progress information
+ */
+typedef void (*ota_progress_callback_t)(const ota_progress_t *progress);
+
+/**
  * @brief OTA update configuration
  */
 typedef struct {
@@ -89,6 +99,7 @@ typedef struct {
     bool auto_reboot;             ///< Automatically reboot after successful update
     uint32_t timeout_ms;          ///< Download timeout in milliseconds
     bool skip_version_check;      ///< Skip version comparison (force update)
+    ota_progress_callback_t progress_callback;  ///< Optional progress callback (called every ~5%)
 } ota_config_t;
 
 // OTA Source URLs - Dual source support with automatic failover
