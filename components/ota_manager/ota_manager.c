@@ -98,16 +98,21 @@ static uint32_t get_time_ms(void)
  * @brief Calculate SHA-256 checksum of OTA partition
  *
  * @param partition Partition to calculate checksum for
+ * @param firmware_size Size of firmware in bytes (0 = use full partition size)
  * @param sha256_hex Output buffer for hex string (65 bytes minimum)
  * @return ESP_OK on success, error otherwise
  */
-static esp_err_t calculate_partition_sha256(const esp_partition_t *partition, char *sha256_hex)
+static esp_err_t calculate_partition_sha256(const esp_partition_t *partition, size_t firmware_size, char *sha256_hex)
 {
     if (!partition || !sha256_hex) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    ESP_LOGI(TAG, "Calculating SHA-256 checksum of partition...");
+    // Use firmware_size if provided, otherwise use full partition size
+    size_t bytes_to_hash = (firmware_size > 0) ? firmware_size : partition->size;
+
+    ESP_LOGI(TAG, "Calculating SHA-256 checksum of %lu bytes (partition size: %lu bytes)...",
+             (unsigned long)bytes_to_hash, (unsigned long)partition->size);
 
     unsigned char sha256_output[32];  // SHA-256 produces 32 bytes
     mbedtls_sha256_context ctx;
@@ -123,10 +128,9 @@ static esp_err_t calculate_partition_sha256(const esp_partition_t *partition, ch
     }
 
     size_t offset = 0;
-    size_t partition_size = partition->size;
 
-    while (offset < partition_size) {
-        size_t read_size = (partition_size - offset > CHUNK_SIZE) ? CHUNK_SIZE : (partition_size - offset);
+    while (offset < bytes_to_hash) {
+        size_t read_size = (bytes_to_hash - offset > CHUNK_SIZE) ? CHUNK_SIZE : (bytes_to_hash - offset);
 
         esp_err_t ret = esp_partition_read(partition, offset, buffer, read_size);
         if (ret != ESP_OK) {
@@ -140,9 +144,9 @@ static esp_err_t calculate_partition_sha256(const esp_partition_t *partition, ch
         offset += read_size;
 
         // Log progress every 100KB
-        if (offset % (100 * 1024) == 0 || offset == partition_size) {
-            ESP_LOGD(TAG, "SHA-256 progress: %zu / %zu bytes (%.1f%%)",
-                     offset, partition_size, (offset * 100.0f) / partition_size);
+        if (offset % (100 * 1024) == 0 || offset == bytes_to_hash) {
+            ESP_LOGD(TAG, "SHA-256 progress: %lu / %lu bytes (%.1f%%)",
+                     (unsigned long)offset, (unsigned long)bytes_to_hash, (offset * 100.0f) / bytes_to_hash);
         }
     }
 
@@ -723,9 +727,26 @@ static void ota_task(void *pvParameters)
             return;
         }
 
-        // Calculate actual SHA-256 of downloaded firmware
+        // Get firmware size from OTA context (total_bytes set by esp_https_ota)
+        uint32_t firmware_size = 0;
+        if (xSemaphoreTake(ota_context.mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            firmware_size = ota_context.total_bytes;
+            xSemaphoreGive(ota_context.mutex);
+        }
+
+        if (firmware_size == 0) {
+            ESP_LOGE(TAG, "❌ Firmware size is 0, cannot verify");
+            esp_https_ota_abort(https_ota_handle);
+            update_state(OTA_STATE_FAILED, OTA_ERROR_CHECKSUM_MISMATCH);
+            vTaskDelete(NULL);
+            return;
+        }
+
+        ESP_LOGI(TAG, "Firmware size: %lu bytes", firmware_size);
+
+        // Calculate actual SHA-256 of downloaded firmware (only the actual firmware bytes)
         char actual_sha256[65];
-        ret = calculate_partition_sha256(update_partition, actual_sha256);
+        ret = calculate_partition_sha256(update_partition, firmware_size, actual_sha256);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "❌ Failed to calculate SHA-256: %s", esp_err_to_name(ret));
             esp_https_ota_abort(https_ota_handle);
