@@ -1,13 +1,13 @@
 {
-  "version": "v2.10.7",
-  "title": "OTA System Fix: Proper Workflow",
-  "description": "Fixed fundamental OTA workflow issues. Tag created AFTER code complete (proper workflow). Comprehensive analysis and documentation. Real-time progress reporting. Partition conflict resolution. Defense-in-depth safety system.",
+  "version": "v2.10.8",
+  "title": "Clean v2.10.8 Build",
+  "description": "Tag at correct commit. Device running v2.10.7-1 will update to v2.10.8. Tests real-time progress reporting and partition switching (ota_0 to ota_1).",
   "release_date": "2025-11-14",
   "firmware_url": "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin",
   "firmware_size": 1337328,
-  "sha256": "1284ca76e142c4a0f1f5735619b51702ce66da726875cfd5e76b7563db765094",
-  "commit_hash": "5acd98fca235bbd023ddee1f18a023564910a135",
+  "sha256": "9a32827767d40d886e6e89deabea97de7310e2326c834a135f83910f02a95e2d",
+  "commit_hash": "1e5ec8530df4397c1fe786c996e9b5a6b41b7314",
   "esp_idf_version": "5.4.2",
-  "build_date": "2025-11-14T17:23:00Z",
+  "build_date": "2025-11-14T17:40:00Z",
   "requires_restart": true
 }
