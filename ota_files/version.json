@@ -1,13 +1,13 @@
 {
-  "version": "v2.10.3",
-  "title": "Real-Time OTA Progress",
-  "description": "Fixed OTA progress reporting in Home Assistant. Added callback mechanism for real-time progress updates every 5%. Now you can watch the download progress live!",
+  "version": "v2.10.4",
+  "title": "Real-Time OTA Progress (Fixed)",
+  "description": "Fixed NULL pointer crash in OTA manager. Progress callback now properly implemented with URLs retrieved before starting OTA task. Real-time progress updates now work correctly in Home Assistant.",
   "release_date": "2025-11-14",
   "firmware_url": "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin",
-  "firmware_size": 1337264,
-  "sha256": "19cfa59335298b335c0288defcd82bfaffd42ac414ef14ad580dffafdcd7de76",
-  "commit_hash": "18b0b7569e86f15250c35d3473a9a2a39b90d298",
+  "firmware_size": 1337312,
+  "sha256": "23f1c13b6397404f5d9c216ddd586f19605dbf5a952a84aa29443f7282b37d1b",
+  "commit_hash": "d49327b1d985c81fa36c8cabe7bb70ee7900b28a",
   "esp_idf_version": "5.4.2",
-  "build_date": "2025-11-14T15:24:15Z",
+  "build_date": "2025-11-14T16:00:12Z",
   "requires_restart": true
 }
