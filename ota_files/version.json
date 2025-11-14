@@ -1,13 +1,13 @@
 {
   "version": "v2.10.5",
-  "title": "Real-Time OTA Progress (Clean Build)",
-  "description": "Clean build with proper git versioning. Same functionality as v2.10.4 but with correct version string reported to Home Assistant.",
+  "title": "Real-Time OTA Progress (Final)",
+  "description": "Final clean build with proper git tag. Version will report as v2.10.5 without any -dirty suffix in Home Assistant.",
   "release_date": "2025-11-14",
   "firmware_url": "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin",
   "firmware_size": 1337328,
-  "sha256": "62791a129c58254b93a1b95a9080efeab75b7b4feb265027d8fffca6b6127bdb",
-  "commit_hash": "8889ec316fcc2fe6c32d86a15e25594df175be0e",
+  "sha256": "19e4ab94c3fe4cbc05e7b9081c5f89254a4a4e5ee1af880b187f5138a051f290",
+  "commit_hash": "74cccce47d9e88c537fcb97ba77d4263a60a4537",
   "esp_idf_version": "5.4.2",
-  "build_date": "2025-11-14T16:19:42Z",
+  "build_date": "2025-11-14T16:22:33Z",
   "requires_restart": true
 }
