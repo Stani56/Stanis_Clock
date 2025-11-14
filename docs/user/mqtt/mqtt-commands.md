@@ -2,8 +2,8 @@
 
 **Current Platform:** YB-ESP32-S3-AMP (ESP32-S3-WROOM-1-N8R2)
 **Device Name:** Clock_Stani_1
-**Last Updated:** November 2025
-**Status:** Production with Audio ✅ | Westminster Chimes ✅ | OTA Updates ✅
+**Last Updated:** November 2025 (v2.9.0)
+**Status:** Production with Audio ✅ | Westminster Chimes ✅ | Dual OTA + SHA-256 ✅
 
 ## MQTT Connection Setup
 
@@ -171,7 +171,7 @@ Payload: {"volume": 0-100}
 
 ---
 
-## 3. OTA Update Commands (Phase 2.4 ✅)
+## 3. OTA Update Commands (Phase 2.4 ✅) - SHA-256 Verified
 
 ### Check for Updates
 
@@ -180,45 +180,75 @@ Payload: {"volume": 0-100}
 Topic: home/Clock_Stani_1/command
 Payload: ota_check_update
 ```
-**Response:** Checks GitHub releases for newer firmware version
-**Status:** Publishes `ota_update_available` or `ota_up_to_date`
+**Response:** Checks GitHub (primary) or Cloudflare R2 (backup) for newer firmware
+**Status:** Auto-publishes to `home/Clock_Stani_1/ota/version` with update availability
 
 ### Start OTA Update
 
-**Start Firmware Update (Auto-Reboot):**
+**Start Firmware Update with SHA-256 Verification (Auto-Reboot):**
 ```bash
 Topic: home/Clock_Stani_1/command
 Payload: ota_start_update
 ```
 **Process:**
-1. Downloads firmware from GitHub releases (latest)
-2. Verifies SHA256 checksum
-3. Flashes to alternate OTA partition
-4. Automatically reboots to new firmware
-5. Validates health checks on first boot
-6. Marks firmware valid if all checks pass
+1. Downloads firmware from configured OTA source (GitHub or Cloudflare R2)
+2. **Verifies SHA-256 checksum** before flashing (3-5 seconds)
+3. **Aborts if checksum mismatch** (network corruption/tampering detection)
+4. Flashes to alternate OTA partition (ota_0 ↔ ota_1)
+5. Automatically reboots to new firmware
+6. Validates health checks on first boot
+7. Marks firmware valid if all checks pass
+
+**Security:** 2^256 collision resistance, detects any bit-level changes
 
 **Cancel Ongoing Update:**
 ```bash
 Topic: home/Clock_Stani_1/command
 Payload: ota_cancel_update
 ```
+**Note:** Can only cancel during download phase, not during verification or flashing
 
-### Get OTA Information
+### Dual OTA Source Management (New in v2.9.0)
 
-**Get Current Progress:**
+**Set OTA Source (GitHub or Cloudflare R2):**
 ```bash
-Topic: home/Clock_Stani_1/command
-Payload: ota_get_progress
+Topic: home/Clock_Stani_1/ota/source/set
+Payload: github
 ```
-**Response Topic:** `home/Clock_Stani_1/ota/progress`
-
-**Get Version Information:**
+**OR**
 ```bash
-Topic: home/Clock_Stani_1/command
-Payload: ota_get_version
+Topic: home/Clock_Stani_1/ota/source/set
+Payload: cloudflare
 ```
-**Response Topic:** `home/Clock_Stani_1/ota/version`
+**Options:** `github` (default), `cloudflare`
+**Persistence:** Source preference saved to NVS, survives reboots
+
+**Get Current OTA Source:**
+```bash
+Topic: home/Clock_Stani_1/ota/source/status
+```
+**Subscribe to status updates (auto-published):**
+**Payload Example:**
+```json
+{
+  "source": "github",
+  "last_successful": "github",
+  "firmware_url": "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin",
+  "version_url": "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/version.json"
+}
+```
+
+### OTA Source URLs
+
+**GitHub (Primary):**
+- **Version JSON:** `https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/version.json`
+- **Firmware:** `https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin`
+
+**Cloudflare R2 (Backup):**
+- **Version JSON:** `https://pub-YOUR_BUCKET.r2.dev/version.json`
+- **Firmware:** `https://pub-YOUR_BUCKET.r2.dev/wordclock.bin`
+
+**Automatic Failover:** If primary source fails, system automatically tries backup source
 
 ### OTA State Topics (Read-Only)
 
@@ -254,10 +284,12 @@ Topic: home/Clock_Stani_1/ota/version
 }
 ```
 
-**OTA Firmware Source:**
-- **GitHub Release:** https://github.com/stani56/Stanis_Clock/releases/latest
-- **Binary:** `wordclock.bin` (1.3MB)
-- **Metadata:** `version.json` (SHA256 checksum + changelog)
+**OTA Firmware Deployment:**
+- **Primary Source:** GitHub raw files (auto-updated on git push)
+- **Backup Source:** Cloudflare R2 (manual upload required)
+- **Binary Size:** ~1.3MB (compressed ESP32-S3 firmware)
+- **Metadata:** `version.json` includes SHA-256 checksum + version info
+- **Automation:** Post-build script generates SHA-256 and version.json automatically
 
 ---
 
@@ -641,7 +673,8 @@ homeassistant/{component_type}/Clock_Stani_1_{MAC}/entity_name/config
   "name": "German Word Clock",
   "model": "YB-ESP32-S3-AMP Word Clock",
   "manufacturer": "Custom Build",
-  "sw_version": "2.6.3"
+  "sw_version": "2.9.0",
+  "configuration_url": "https://github.com/Stani56/Stanis_Clock"
 }
 ```
 
@@ -697,8 +730,6 @@ homeassistant/{component_type}/Clock_Stani_1_{MAC}/entity_name/config
 **OTA Check:** `ota_check_update`
 **OTA Update:** `ota_start_update`
 **OTA Cancel:** `ota_cancel_update`
-**Get OTA Progress:** `ota_get_progress`
-**Get OTA Version:** `ota_get_version`
 **Start Transitions:** `test_transitions_start`
 **Stop Transitions:** `test_transitions_stop`
 **Refresh Sensors:** `refresh_sensors`
@@ -765,5 +796,6 @@ mosquitto_pub ... -m "ota_get version"  # Returns unknown_command
 ---
 
 **Last Updated:** November 2025
-**Firmware Version:** v2.6.3+
+**Firmware Version:** v2.9.0+
 **Platform:** YB-ESP32-S3-AMP (ESP32-S3-WROOM-1-N8R2)
+**Features:** Dual OTA Sources | SHA-256 Verification | Westminster Chimes | 30 ESP-IDF Components
