@@ -1,13 +1,13 @@
 {
-  "version": "v2.10.0",
-  "title": "OTA Test Release",
-  "description": "Testing dual OTA system with SHA-256 verification. Added version banner to boot logs for OTA verification.",
+  "version": "v2.10.1",
+  "title": "SHA-256 Fix: Verify Only Firmware Bytes",
+  "description": "Fixed SHA-256 verification to hash only the actual firmware size (1.3MB) instead of the full partition size (2.5MB). This prevents mismatches caused by residual data in OTA partitions.",
   "release_date": "2025-11-14",
   "firmware_url": "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin",
-  "firmware_size": 1336608,
-  "sha256": "00789a10279342b22e3fda8253304165022aba21c2ce1f5095c33ba9749a0e3e",
-  "commit_hash": "76c527931579dfa51849051d33bf489345950a48",
+  "firmware_size": 1336816,
+  "sha256": "fa4929c1fb7b6f834b4abe4d2e16eeb82fb339d31f91989eb2881c2da56bde53",
+  "commit_hash": "01c6f8898f8ca28349e8ddd4d6c9751b3d592f8a",
   "esp_idf_version": "5.4.2",
-  "build_date": "2025-11-14T14:44:13Z",
+  "build_date": "2025-11-14T14:49:26Z",
   "requires_restart": true
 }
