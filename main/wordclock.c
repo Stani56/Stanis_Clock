@@ -516,6 +516,8 @@ void app_main(void)
     // Log system information
     ESP_LOGI(TAG, "================================================");
     ESP_LOGI(TAG, "ESP32 GERMAN WORD CLOCK - PRODUCTION VERSION");
+    ESP_LOGI(TAG, "🚀 Firmware v2.10.0 - OTA Test Release");
+    ESP_LOGI(TAG, "✨ SHA-256 Verified | Dual OTA Sources");
     ESP_LOGI(TAG, "================================================");
     ESP_LOGI(TAG, "ESP-IDF Version: %s", esp_get_idf_version());
     ESP_LOGI(TAG, "Free heap: %ld bytes", esp_get_free_heap_size());
