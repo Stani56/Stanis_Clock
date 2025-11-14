@@ -1,13 +1,13 @@
 {
-  "version": "v2.10.6",
-  "title": "OTA Partition Conflict Fixed",
-  "description": "Fixed ESP_ERR_OTA_PARTITION_CONFLICT with proper idf.py flash usage. Added comprehensive documentation for correct flashing procedures. Real-time OTA progress reporting (5% intervals). Permanent solution documented to prevent manual partition addressing mistakes.",
+  "version": "v2.10.7",
+  "title": "OTA System Fix: Proper Workflow",
+  "description": "Fixed fundamental OTA workflow issues. Tag created AFTER code complete (proper workflow). Comprehensive analysis and documentation. Real-time progress reporting. Partition conflict resolution. Defense-in-depth safety system.",
   "release_date": "2025-11-14",
   "firmware_url": "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin",
   "firmware_size": 1337328,
-  "sha256": "d47c87d3c76b00977d132fc86056d66f2d486acc6aa9b38a5b97274657b45bc5",
-  "commit_hash": "6d80f432ad0f912d9f4562a90bf89c3e7c8a6e32",
+  "sha256": "1284ca76e142c4a0f1f5735619b51702ce66da726875cfd5e76b7563db765094",
+  "commit_hash": "5acd98fca235bbd023ddee1f18a023564910a135",
   "esp_idf_version": "5.4.2",
-  "build_date": "2025-11-14T16:37:35Z",
+  "build_date": "2025-11-14T17:23:00Z",
   "requires_restart": true
 }
