@@ -1,13 +1,13 @@
 {
-  "version": "v2.10.5",
-  "title": "Real-Time OTA Progress (Final)",
-  "description": "Final clean build with proper git tag. Version will report as v2.10.5 without any -dirty suffix in Home Assistant.",
+  "version": "v2.10.6",
+  "title": "OTA Partition Conflict Fixed",
+  "description": "Fixed ESP_ERR_OTA_PARTITION_CONFLICT with proper idf.py flash usage. Added comprehensive documentation for correct flashing procedures. Real-time OTA progress reporting (5% intervals). Permanent solution documented to prevent manual partition addressing mistakes.",
   "release_date": "2025-11-14",
   "firmware_url": "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin",
   "firmware_size": 1337328,
-  "sha256": "19e4ab94c3fe4cbc05e7b9081c5f89254a4a4e5ee1af880b187f5138a051f290",
-  "commit_hash": "74cccce47d9e88c537fcb97ba77d4263a60a4537",
+  "sha256": "d47c87d3c76b00977d132fc86056d66f2d486acc6aa9b38a5b97274657b45bc5",
+  "commit_hash": "6d80f432ad0f912d9f4562a90bf89c3e7c8a6e32",
   "esp_idf_version": "5.4.2",
-  "build_date": "2025-11-14T16:22:33Z",
+  "build_date": "2025-11-14T16:37:35Z",
   "requires_restart": true
 }
