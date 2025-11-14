@@ -1111,8 +1111,13 @@ static esp_err_t mqtt_handle_command(const char* payload, int payload_len) {
             mqtt_publish_status("ota_check_failed");
         }
     }
-    else if (strcmp(command, "ota_start_update") == 0) {
-        ESP_LOGI(TAG, "🚀 Starting OTA firmware update...");
+    else if (strcmp(command, "ota_start_update") == 0 || strcmp(command, "ota_force_update") == 0) {
+        bool force = (strcmp(command, "ota_force_update") == 0);
+        if (force) {
+            ESP_LOGI(TAG, "🚀 Starting FORCED OTA firmware update (skip version check)...");
+        } else {
+            ESP_LOGI(TAG, "🚀 Starting OTA firmware update...");
+        }
 
         // Get URLs from current OTA source
         ota_source_t source = ota_get_source();
@@ -1129,7 +1134,7 @@ static esp_err_t mqtt_handle_command(const char* payload, int payload_len) {
             .version_url = version_url,
             .auto_reboot = true,
             .timeout_ms = OTA_DEFAULT_TIMEOUT_MS,
-            .skip_version_check = false,
+            .skip_version_check = force,  // Skip version check if force command
             .progress_callback = mqtt_ota_progress_callback  // Real-time progress updates
         };
 
