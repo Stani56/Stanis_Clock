@@ -1,13 +1,13 @@
 {
-  "version": "v2.10.9",
-  "title": "Force Update Feature",
-  "description": "Added ota_force_update command to bypass version checks. Tests partition ping-pong: ota_0 (factory) -> ota_1 (0x2a0000). Real-time progress reporting enabled.",
+  "version": "2.11.1",
+  "title": "Fix OTA Comparison Logic",
+  "description": "Fixed critical bug: Version check now happens FIRST (blocks downgrades), binary hash SECOND (optimization). Prevents accidental downgrades to older firmware.",
   "release_date": "2025-11-14",
   "firmware_url": "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin",
-  "firmware_size": 1337472,
-  "sha256": "d3ecc44b5a9d748eeb5c2f2751068cb4e16ea6e9fe8738bb756880959b71292b",
-  "commit_hash": "aad15569be8d72be8df9442212dabfa1a1a910b7",
+  "firmware_size": 1339312,
+  "sha256": "f3ee5486f263b7fd7e8f00b41089a9af7883acb1623cedceae5e29488e284a85",
+  "commit_hash": "d5dc810e7b7a5618ae37d2f1a3b8becb169c8b0d",
   "esp_idf_version": "5.4.2",
-  "build_date": "2025-11-14T18:00:00Z",
+  "build_date": "2025-11-14T22:34:36Z",
   "requires_restart": true
 }
