@@ -1,7 +1,7 @@
 {
   "version": "2.11.3",
-  "title": ""Version Consistency Fix"",
-  "description": ""Version Consistency Fix"",
+  "title": "Version Consistency Fix",
+  "description": "Version Consistency Fix",
   "release_date": "2025-11-15",
   "firmware_url": "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin",
   "firmware_size": 1339312,
