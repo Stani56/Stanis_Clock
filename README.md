@@ -243,6 +243,7 @@ Payload: test_transitions_start
 - **[Hardware Setup](docs/user/hardware-setup.md)** - Physical assembly guide
 - **[Home Assistant Integration](docs/user/home-assistant-setup.md)** - Smart home setup
 - **[MQTT Commands](docs/user/mqtt-commands.md)** - Remote control reference
+- **[🚀 OTA Update Recipe](docs/user/OTA_UPDATE_RECIPE.md)** - **Battle-tested systematic firmware update guide**
 - **[Troubleshooting](docs/user/troubleshooting.md)** - Common issues and solutions
 
 ### 🔧 For Developers  
