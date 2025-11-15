@@ -1,7 +1,7 @@
 /**
  * @file wordclock.c
  * @brief Main application for ESP32 German Word Clock with IoT integration
- * 
+ *
  * This is the refactored main application that uses modular components for
  * display, brightness, and transition control. The system features:
  * - German time display with proper grammar
@@ -11,51 +11,52 @@
  */
 
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "esp_log.h"
-#include "esp_system.h"
+#include <string.h>
+
 #include "esp_clk_tree.h"
 #include "esp_heap_caps.h"
+#include "esp_log.h"
+#include "esp_system.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "soc/rtc.h"
 
 // Hardware components
-#include "i2c_devices.h"
-#include "wordclock_time.h"
 #include "adc_manager.h"
-#include "light_sensor.h"
+#include "audio_manager.h"  // ESP32-S3: External MAX98357A on GPIO 5/6/7
 #include "button_manager.h"
-#include "status_led_manager.h"
+#include "chime_manager.h"  // ESP32-S3: Westminster chimes (Phase 2.3)
 #include "external_flash.h"
 #include "filesystem_manager.h"
-#include "audio_manager.h"   // ESP32-S3: External MAX98357A on GPIO 5/6/7
-#include "sdcard_manager.h"  // ESP32-S3: External SD card on GPIO 10/11/12/13
-#include "chime_manager.h"   // ESP32-S3: Westminster chimes (Phase 2.3)
+#include "i2c_devices.h"
+#include "light_sensor.h"
 #include "ota_manager.h"     // ESP32-S3: OTA firmware updates (Phase 2.4)
+#include "sdcard_manager.h"  // ESP32-S3: External SD card on GPIO 10/11/12/13
+#include "status_led_manager.h"
+#include "wordclock_time.h"
 
 // Refactored modules
-#include "wordclock_display.h"
 #include "wordclock_brightness.h"
+#include "wordclock_display.h"
 #include "wordclock_transitions.h"
 
 // Network components
-#include "nvs_manager.h"
-#include "wifi_manager.h"
-#include "ntp_manager.h"
 #include "mqtt_manager.h"
+#include "ntp_manager.h"
+#include "nvs_manager.h"
 #include "web_server.h"
+#include "wifi_manager.h"
 
 // Advanced features
 #include "brightness_config.h"
+#include "error_log_manager.h"
+#include "led_validation.h"
 #include "mqtt_discovery.h"
 #include "thread_safety.h"
 #include "wordclock_mqtt_handlers.h"
-#include "led_validation.h"
-#include "error_log_manager.h"
 
-static const char *TAG = "wordclock";
+static const char* TAG = "wordclock";
 
 // CPU frequency for performance monitoring
 static uint32_t cpu_freq_mhz = 0;
@@ -67,22 +68,15 @@ static void test_all_systems(void);
 static void test_live_word_clock(void);
 
 // Helper function to get time from RTC
-static esp_err_t wordclock_time_get(wordclock_time_t *time)
-{
-    return ds3231_get_time_struct(time);
-}
+static esp_err_t wordclock_time_get(wordclock_time_t* time) { return ds3231_get_time_struct(time); }
 
 // Helper function to sync RTC with NTP
-static esp_err_t ntp_manager_sync_rtc(void)
-{
-    return ntp_sync_to_rtc();
-}
+static esp_err_t ntp_manager_sync_rtc(void) { return ntp_sync_to_rtc(); }
 
 /**
  * @brief Initialize hardware subsystems
  */
-static esp_err_t initialize_hardware(void)
-{
+static esp_err_t initialize_hardware(void) {
     ESP_LOGI(TAG, "=== INITIALIZING HARDWARE ===");
 
     // Initialize NVS FIRST - Required before any component that uses NVS storage
@@ -100,7 +94,7 @@ static esp_err_t initialize_hardware(void)
         ESP_LOGE(TAG, "Failed to initialize I2C devices");
         return ret;
     }
-    
+
     // Scan I2C buses for diagnostics
     i2c_scan_bus(I2C_LEDS_MASTER_PORT);
     i2c_scan_bus(I2C_SENSORS_MASTER_PORT);
@@ -197,31 +191,31 @@ static esp_err_t initialize_hardware(void)
         ESP_LOGE(TAG, "Failed to initialize brightness control");
         return ret;
     }
-    
+
     // Initialize transition system
     ret = transitions_init();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Failed to initialize transitions - continuing with instant mode");
     }
-    
+
     // Initialize button manager
     ret = button_manager_init();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Button manager init failed - continuing without button control");
     }
-    
+
     // Initialize status LED manager
     ret = status_led_init();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Status LED manager init failed - continuing without status LEDs");
     }
-    
+
     // Start status LED monitoring task
     ret = status_led_start_task();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Status LED task start failed");
     }
-    
+
     ESP_LOGI(TAG, "✅ Hardware initialization complete");
     return ESP_OK;
 }
@@ -229,8 +223,7 @@ static esp_err_t initialize_hardware(void)
 /**
  * @brief Initialize network subsystems
  */
-static esp_err_t initialize_network(void)
-{
+static esp_err_t initialize_network(void) {
     ESP_LOGI(TAG, "=== INITIALIZING NETWORK ===");
 
     // NOTE: NVS is now initialized in initialize_hardware() before any components need it
@@ -240,31 +233,31 @@ static esp_err_t initialize_network(void)
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Failed to init brightness config - using defaults");
     }
-    
+
     // Early NTP manager init (timezone only)
     ret = ntp_manager_init();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Failed to initialize NTP manager");
     }
-    
+
     // Initialize WiFi manager
     ret = wifi_manager_init();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize WiFi manager");
         return ret;
     }
-    
+
     // Check for stored WiFi credentials
     char ssid[64] = {0};
     char password[64] = {0};
-    
+
     // Try to load credentials
     ret = nvs_manager_load_wifi_credentials(ssid, password, sizeof(ssid), sizeof(password));
     bool has_creds = (ret == ESP_OK && strlen(ssid) > 0);
-    
+
     if (has_creds) {
         ESP_LOGI(TAG, "Found stored WiFi credentials for SSID: %s", ssid);
-        
+
         // Check if WiFi is already connected (from previous boot cycle)
         if (thread_safe_get_wifi_connected()) {
             ESP_LOGI(TAG, "WiFi already connected - skipping reconnection");
@@ -277,30 +270,30 @@ static esp_err_t initialize_network(void)
             }
         }
     }
-    
+
     if (!has_creds && !thread_safe_get_wifi_connected()) {
         ESP_LOGI(TAG, "Starting WiFi in AP mode for configuration");
         wifi_manager_init_ap();
-        
+
         // Start web server for configuration
         httpd_handle_t server = web_server_start();
         if (server == NULL) {
             ESP_LOGW(TAG, "Failed to start web server");
         }
     }
-    
-    // Initialize MQTT manager  
+
+    // Initialize MQTT manager
     ret = mqtt_manager_init();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "MQTT manager init failed - continuing without MQTT");
     }
-    
+
     // Initialize MQTT handlers
     ret = mqtt_handlers_init();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "MQTT handlers init failed - continuing with basic MQTT");
     }
-    
+
     // Initialize MQTT discovery
     ret = mqtt_discovery_init();
     if (ret != ESP_OK) {
@@ -335,10 +328,9 @@ static esp_err_t initialize_network(void)
  * @brief Test all hardware systems
  */
 #ifdef CONFIG_RUN_SYSTEM_TESTS
-static void test_all_systems(void)
-{
+static void test_all_systems(void) {
     ESP_LOGI(TAG, "=== RUNNING SYSTEM TESTS ===");
-    
+
     // Test TLC59116 LED controllers
     ESP_LOGI(TAG, "Testing individual LED control...");
     for (uint8_t row = 0; row < WORDCLOCK_ROWS; row++) {
@@ -350,7 +342,7 @@ static void test_all_systems(void)
             tlc_set_matrix_led(row, col, 0);
         }
     }
-    
+
     // Test minute indicators
     ESP_LOGI(TAG, "Testing minute indicators...");
     for (uint8_t i = 0; i <= 4; i++) {
@@ -358,7 +350,7 @@ static void test_all_systems(void)
         vTaskDelay(pdMS_TO_TICKS(500));
     }
     tlc_turn_off_all_leds();
-    
+
     // Test global brightness
     ESP_LOGI(TAG, "Testing global brightness control...");
     display_test_time();
@@ -367,25 +359,24 @@ static void test_all_systems(void)
         tlc_set_global_brightness(brightness_levels[i]);
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
-    
+
     // Test German time display
     test_german_time_display();
-    
+
     // Test brightness control
     test_brightness_control();
-    
+
     ESP_LOGI(TAG, "=== ALL TESTS COMPLETE ===");
 }
-#endif // CONFIG_RUN_SYSTEM_TESTS
+#endif  // CONFIG_RUN_SYSTEM_TESTS
 
 /**
  * @brief Live word clock operation with RTC
  */
-static void test_live_word_clock(void)
-{
+static void test_live_word_clock(void) {
     ESP_LOGI(TAG, "=== STARTING LIVE WORD CLOCK ===");
     ESP_LOGI(TAG, "Reading time from DS3231 and displaying German words");
-    
+
     wordclock_time_t current_time;
     wordclock_time_t previous_time = {0};
     uint32_t loop_count = 0;
@@ -416,9 +407,8 @@ static void test_live_word_clock(void)
                 uint8_t new_display_hour = (new_base >= 25) ? (current_time.hours + 1) % 12 : current_time.hours % 12;
 
                 // Check if words actually change
-                should_validate = (old_base != new_base) ||
-                                (old_display_hour != new_display_hour) ||
-                                ((old_base == 0) != (new_base == 0)); // UHR appears/disappears
+                should_validate = (old_base != new_base) || (old_display_hour != new_display_hour) ||
+                                  ((old_base == 0) != (new_base == 0));  // UHR appears/disappears
             }
 
             // Display time with transitions
@@ -442,8 +432,8 @@ static void test_live_word_clock(void)
 
             // Log time occasionally
             if (loop_count % 20 == 0) {
-                ESP_LOGI(TAG, "Current time: %02d:%02d:%02d",
-                         current_time.hours, current_time.minutes, current_time.seconds);
+                ESP_LOGI(TAG, "Current time: %02d:%02d:%02d", current_time.hours, current_time.minutes,
+                         current_time.seconds);
             }
         } else {
             ESP_LOGW(TAG, "Failed to read RTC - displaying test time");
@@ -489,11 +479,8 @@ static void test_live_word_clock(void)
                 size_t min_free_psram = heap_caps_get_minimum_free_size(MALLOC_CAP_SPIRAM);
                 size_t max_used_psram = total_psram - min_free_psram;
 
-                ESP_LOGI(TAG, "📊 PSRAM: Used %.2f MB / %.2f MB (%.1f%%), Peak %.2f MB",
-                         used_psram / 1048576.0,
-                         total_psram / 1048576.0,
-                         (used_psram * 100.0) / total_psram,
-                         max_used_psram / 1048576.0);
+                ESP_LOGI(TAG, "📊 PSRAM: Used %.2f MB / %.2f MB (%.1f%%), Peak %.2f MB", used_psram / 1048576.0,
+                         total_psram / 1048576.0, (used_psram * 100.0) / total_psram, max_used_psram / 1048576.0);
 
                 // Warn if approaching or exceeding YB-AMP limit
                 if (max_used_psram > 2097152) {  // Peak usage > 2MB
@@ -511,12 +498,11 @@ static void test_live_word_clock(void)
 /**
  * @brief Main application entry point
  */
-void app_main(void)
-{
+void app_main(void) {
     // Log system information
     ESP_LOGI(TAG, "================================================");
     ESP_LOGI(TAG, "ESP32 GERMAN WORD CLOCK - PRODUCTION VERSION");
-    ESP_LOGI(TAG, "🚀 Firmware v2.11.2 - Dual-OTA Partition Table Fixed");
+    ESP_LOGI(TAG, "🚀 Firmware v2.11.3 - Version Consistency Fix");
     ESP_LOGI(TAG, "✅ Partition Table: ota_0 + ota_1 | No Conflicts | Rollback Protection");
     ESP_LOGI(TAG, "================================================");
     ESP_LOGI(TAG, "ESP-IDF Version: %s", esp_get_idf_version());
@@ -528,12 +514,12 @@ void app_main(void)
     size_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
     size_t used_psram = total_psram - free_psram;
     if (total_psram > 0) {
-        ESP_LOGI(TAG, "📊 PSRAM Total: %zu bytes (%zu KB, %.1f MB)",
-                 total_psram, total_psram / 1024, total_psram / 1048576.0);
-        ESP_LOGI(TAG, "📊 PSRAM Used: %zu bytes (%zu KB, %.1f MB)",
-                 used_psram, used_psram / 1024, used_psram / 1048576.0);
-        ESP_LOGI(TAG, "📊 PSRAM Free: %zu bytes (%zu KB, %.1f MB)",
-                 free_psram, free_psram / 1024, free_psram / 1048576.0);
+        ESP_LOGI(TAG, "📊 PSRAM Total: %zu bytes (%zu KB, %.1f MB)", total_psram, total_psram / 1024,
+                 total_psram / 1048576.0);
+        ESP_LOGI(TAG, "📊 PSRAM Used: %zu bytes (%zu KB, %.1f MB)", used_psram, used_psram / 1024,
+                 used_psram / 1048576.0);
+        ESP_LOGI(TAG, "📊 PSRAM Free: %zu bytes (%zu KB, %.1f MB)", free_psram, free_psram / 1024,
+                 free_psram / 1048576.0);
         ESP_LOGI(TAG, "📊 PSRAM Usage: %.1f%%", (used_psram * 100.0) / total_psram);
 
         // YB-AMP migration check: Warn if usage > 2MB
@@ -553,38 +539,38 @@ void app_main(void)
     rtc_clk_cpu_freq_get_config(&freq_config);
     cpu_freq_mhz = freq_config.freq_mhz;
     ESP_LOGI(TAG, "CPU Frequency: %lu MHz", cpu_freq_mhz);
-    
+
     // Initialize thread safety first
     esp_err_t ret = thread_safety_init();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize thread safety: %s", esp_err_to_name(ret));
         return;
     }
-    
+
     // Initialize hardware
     ret = initialize_hardware();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Hardware initialization failed");
         return;
     }
-    
+
     // Initialize network
     ret = initialize_network();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Network initialization failed - continuing offline");
     }
-    
+
     // Wait for network services to stabilize
     vTaskDelay(pdMS_TO_TICKS(2000));
-    
-    // Optional: Run system tests
-    #ifdef CONFIG_RUN_SYSTEM_TESTS
+
+// Optional: Run system tests
+#ifdef CONFIG_RUN_SYSTEM_TESTS
     test_all_systems();
-    #endif
-    
+#endif
+
     // Start live word clock operation
     test_live_word_clock();
-    
+
     // Should never reach here
     ESP_LOGE(TAG, "Main loop exited unexpectedly!");
 }
