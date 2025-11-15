@@ -1,13 +1,9 @@
 {
   "version": "2.11.2",
-  "title": "Dual-OTA Partition Table Fix",
-  "description": "Dual-OTA Partition Table Fix",
-  "release_date": "2025-11-14",
-  "firmware_url": "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin",
+  "title": "Version String Update - OTA Diagnostic Test",
   "firmware_size": 1339312,
-  "sha256": "40d2705ed3f17b816a36f30c1038093a8deed2b21f52d6fd16debb4b5905b511",
-  "commit_hash": "bb83db1cb2814b4fd3d107cd0c48128bebb17169",
+  "sha256": "b68b075e3461c1dc43ffb0bb0caf77bcce67d620b5722a929142d8b99b82d7a6",
+  "commit_hash": "8dbf4cd3",
   "esp_idf_version": "5.4.2",
-  "build_date": "2025-11-14T22:53:03Z",
-  "requires_restart": true
+  "build_date": "2025-11-15T08:50:44Z"
 }
