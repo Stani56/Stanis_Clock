@@ -1,9 +1,13 @@
 {
-  "version": "2.11.2",
-  "title": "Version String Update - OTA Diagnostic Test",
+  "version": "2.11.3",
+  "title": ""Version Consistency Fix"",
+  "description": ""Version Consistency Fix"",
+  "release_date": "2025-11-15",
+  "firmware_url": "https://raw.githubusercontent.com/Stani56/Stanis_Clock/main/ota_files/wordclock.bin",
   "firmware_size": 1339312,
-  "sha256": "b68b075e3461c1dc43ffb0bb0caf77bcce67d620b5722a929142d8b99b82d7a6",
-  "commit_hash": "8dbf4cd3",
+  "sha256": "b6e64aaa7163af0d76065914eac1f83b55a984ee46d385aa4c51c6ae270052e0",
+  "commit_hash": "d3c1d6c7b5bce65c97dc7b48187a8de60d943d76",
   "esp_idf_version": "5.4.2",
-  "build_date": "2025-11-15T08:50:44Z"
+  "build_date": "2025-11-15T10:40:45Z",
+  "requires_restart": true
 }
