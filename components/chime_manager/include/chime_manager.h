@@ -172,6 +172,8 @@ esp_err_t chime_manager_check_time(void);
  * @brief Manually play a specific chime (for testing)
  *
  * Ignores enabled/quiet hours settings. Useful for MQTT test commands.
+ * Special case: CHIME_TEST_SINGLE plays as 3 o'clock (hour chime + 3 strikes)
+ * for consistent timing interval testing.
  *
  * @param type Chime type to play
  * @return ESP_OK on success

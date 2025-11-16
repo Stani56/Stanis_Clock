@@ -256,7 +256,7 @@ static esp_err_t play_chime_internal(chime_type_t type, uint8_t hour) {
         // Wait for main chime to finish
         // TODO: Implement audio_is_playing() check
         // For now, use simple delay based on typical chime duration
-        vTaskDelay(pdMS_TO_TICKS(5000));  // 5 seconds pause before hour strikes
+        vTaskDelay(pdMS_TO_TICKS(1000));  // 1 second pause before hour strikes
 
         // Play strikes with gaps
         for (uint8_t i = 0; i < strikes; i++) {
@@ -268,7 +268,7 @@ static esp_err_t play_chime_internal(chime_type_t type, uint8_t hour) {
 
             // Gap between strikes (except after last)
             if (i < strikes - 1) {
-                vTaskDelay(pdMS_TO_TICKS(2000));  // 2 second gap
+                vTaskDelay(pdMS_TO_TICKS(1000));  // 1 second gap
             }
         }
 
@@ -513,6 +513,13 @@ esp_err_t chime_manager_play_test(chime_type_t type) {
     }
 
     ESP_LOGI(TAG, "🧪 Manual test chime requested (type: %d)", type);
+
+    // For CHIME_TEST_SINGLE, play as 3 o'clock (hour chime + 3 strikes)
+    // This allows testing the timing intervals consistently
+    if (type == CHIME_TEST_SINGLE) {
+        ESP_LOGI(TAG, "🕒 Testing as 3 o'clock chime (hour chime + 3 strikes)");
+        return play_chime_internal(CHIME_HOUR, 3);
+    }
 
     // Get current hour for strike count (if testing hour chime)
     time_t now;
