@@ -215,6 +215,51 @@ Very Bright: 500-1500 lux → 200-255 brightness
 - To enable: Change `mode2_val = 0x00` to `0x01` in i2c_devices.c line 283
 - See [docs/implementation/led-validation/LED_VALIDATION_HARDWARE_READBACK.md](docs/implementation/led-validation/LED_VALIDATION_HARDWARE_READBACK.md) section on EFLAG registers
 
+### Westminster Chimes System (Phase 2.3 ✅)
+
+**Automatic Quarter-Hour Chiming:**
+- **:15** - Quarter-past (4 notes)
+- **:30** - Half-past (8 notes)
+- **:45** - Quarter-to (12 notes)
+- **:00** - Full hour (16 notes + hour strikes)
+
+**Timing Configuration (Optimized Nov 2025):**
+```c
+// components/chime_manager/chime_manager.c
+Pause before hour strikes: 1000ms (1 second)
+Gap between strikes:       1000ms (1 second)
+
+// Performance examples:
+3 o'clock:  Hour chime + 1s + 3 strikes (2 gaps) = ~8s total
+12 o'clock: Hour chime + 1s + 12 strikes (11 gaps) = ~18s total
+```
+
+**Previous timing (until v2.11.3):** 5s pause + 2s gaps = 2-3× slower
+
+**Test Commands:**
+```bash
+# Test 3 o'clock chime (recommended for timing verification)
+mosquitto_pub -t 'home/[DEVICE_NAME]/command' -m 'chimes_test_strike'
+
+# Test other patterns
+chimes_test_quarter      # :15 pattern
+chimes_test_half         # :30 pattern
+chimes_test_quarter_to   # :45 pattern
+chimes_test_hour         # Full hour (based on current time)
+```
+
+**Storage:**
+- **Location:** `/sdcard/CHIMES/WESTMI~1/` (8.3 DOS format for FAT32)
+- **Files:** `QUARTE~1.PCM`, `HALF_P~1.PCM`, `QUARTE~2.PCM`, `HOUR_C~1.PCM`, `STRIKE~1.PCM`
+- **Format:** 16kHz, 16-bit mono PCM (raw audio)
+- **Playback:** I2S → MAX98357A amplifiers
+
+**Configuration (via MQTT):**
+- Enable/disable chiming
+- Volume control (0-100%)
+- Quiet hours (default: 22:00-07:00)
+- Per-chime testing
+
 ## Home Assistant Integration
 
 ### MQTT Discovery (36 Entities)

@@ -2,8 +2,8 @@
 
 **Current Platform:** YB-ESP32-S3-AMP (ESP32-S3-WROOM-1-N8R2)
 **Device Name:** Clock_Stani_1
-**Last Updated:** November 2025 (v2.9.0)
-**Status:** Production with Audio ✅ | Westminster Chimes ✅ | Dual OTA + SHA-256 ✅
+**Last Updated:** November 2025 (v2.11.3+)
+**Status:** Production with Audio ✅ | Westminster Chimes ✅ (Optimized Timing) | Dual OTA + SHA-256 ✅
 
 ## MQTT Connection Setup
 
@@ -126,12 +126,42 @@ Payload: chimes_volume_75
 
 ### Test Chimes
 
-**Test Single Strike:**
+**Test 3 O'Clock Chime (Recommended):**
 ```bash
 Topic: home/Clock_Stani_1/command
 Payload: chimes_test_strike
 ```
-**Plays:** Single Westminster strike (tests audio output)
+**Plays:** Complete 3 o'clock chime sequence (hour chime + 3 strikes)
+**Duration:** ~8 seconds
+**Purpose:** Tests audio output AND timing intervals consistently
+**Timing:**
+- Westminster hour melody (16 notes)
+- 1 second pause
+- Strike 1, pause 1s, Strike 2, pause 1s, Strike 3
+
+**Test Other Chime Patterns:**
+```bash
+# Test quarter-past chime (4 notes)
+Topic: home/Clock_Stani_1/command
+Payload: chimes_test_quarter
+
+# Test half-past chime (8 notes)
+Topic: home/Clock_Stani_1/command
+Payload: chimes_test_half
+
+# Test quarter-to chime (12 notes)
+Topic: home/Clock_Stani_1/command
+Payload: chimes_test_quarter_to
+
+# Test full hour chime (based on current hour)
+Topic: home/Clock_Stani_1/command
+Payload: chimes_test_hour
+```
+
+**Note:** All hour chimes use the improved timing:
+- **Pause before strikes:** 1 second (down from 5s)
+- **Gap between strikes:** 1 second (down from 2s)
+- **Example (12 o'clock):** Hour melody + 1s pause + 12 strikes with 1s gaps = ~12s total
 
 ### Quiet Hours
 

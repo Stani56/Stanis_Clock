@@ -21,11 +21,12 @@ Phase 2.3 successfully implements a complete Westminster Chimes system for the E
 #### Hour Strike System
 - **Strike Count:** 1-12 strikes based on 12-hour format
 - **Strike Logic:** `(hour % 12 == 0) ? 12 : (hour % 12)`
-- **Timing:** 30-second delay after main chime, 2-second gaps between strikes
-- **Examples:**
-  - 7:00 AM/PM → 16 notes + 7 strikes
-  - 12:00 AM/PM → 16 notes + 12 strikes
-  - 1:00 AM/PM → 16 notes + 1 strike
+- **Timing (Optimized Nov 2025):** 1-second delay after main chime, 1-second gaps between strikes
+- **Previous Timing (until v2.11.3):** 5-second delay, 2-second gaps (2-3× slower)
+- **Examples (new timing):**
+  - 3:00 → 16 notes + 1s pause + 3 strikes (2 gaps) = ~8s total
+  - 7:00 → 16 notes + 1s pause + 7 strikes (6 gaps) = ~13s total
+  - 12:00 → 16 notes + 1s pause + 12 strikes (11 gaps) = ~18s total
 
 ### 2. Quiet Hours Management ✅
 
@@ -86,7 +87,11 @@ Hardcoded 8.3 paths in chime_manager.h:
 |---------|-------------|----------------|------------------|
 | `chimes_enable` | Enable automatic chiming | `status` | `chimes_enabled` |
 | `chimes_disable` | Disable automatic chiming | `status` | `chimes_disabled` |
-| `chimes_test_strike` | Play test strike | `status` | `chimes_test_playing` |
+| `chimes_test_strike` | Play 3 o'clock chime (hour + 3 strikes) | `status` | `chimes_test_playing` |
+| `chimes_test_quarter` | Play quarter-past chime (4 notes) | `status` | `chimes_test_playing` |
+| `chimes_test_half` | Play half-past chime (8 notes) | `status` | `chimes_test_playing` |
+| `chimes_test_quarter_to` | Play quarter-to chime (12 notes) | `status` | `chimes_test_playing` |
+| `chimes_test_hour` | Play hour chime (current hour) | `status` | `chimes_test_playing` |
 | `chimes_set_quiet_hours_off` | Disable quiet hours (24/7) | `status` | `chimes_quiet_hours_disabled` |
 | `chimes_set_quiet_hours_default` | Set to 22:00-07:00 | `status` | `chimes_quiet_hours_set` |
 | `chimes_volume_N` | Set volume (0-100) | `status` | `chime_volume_set_N` |
@@ -272,7 +277,8 @@ ffmpeg -i westminster_hour.wav -ar 16000 -ac 1 -f s16le -acodec pcm_s16le HOUR.P
 
 1. **Audio Playback** ✅
    - Tested with `chimes_test_strike`
-   - Result: Single bell strike plays correctly
+   - Result: Complete 3 o'clock chime (hour melody + 3 strikes) plays correctly
+   - Timing verified: 1s pause, 1s gaps (optimized Nov 2025)
 
 2. **FAT32 Compatibility** ✅
    - Issue: Files not found with long names
