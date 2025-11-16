@@ -1605,11 +1605,7 @@ esp_err_t mqtt_discovery_start(esp_mqtt_client_handle_t client)
             vTaskDelay(pdMS_TO_TICKS(20));
         }
         
-        // Clear removed transition duration and individual brightness controls
-        snprintf(topic, sizeof(topic), "homeassistant/number/%s/transition_duration/config", discovery_config.node_id);
-        esp_mqtt_client_publish(mqtt_client, topic, "", 0, 1, true);
-        vTaskDelay(pdMS_TO_TICKS(20));
-        
+        // Clear removed individual brightness control (transition_duration is still active!)
         snprintf(topic, sizeof(topic), "homeassistant/number/%s/individual_brightness/config", discovery_config.node_id);
         esp_mqtt_client_publish(mqtt_client, topic, "", 0, 1, true);
         vTaskDelay(pdMS_TO_TICKS(20));
