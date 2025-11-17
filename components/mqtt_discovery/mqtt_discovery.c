@@ -1,5 +1,6 @@
 #include "mqtt_discovery.h"
 #include "mqtt_manager.h"
+#include "i2c_devices.h"
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_system.h"
@@ -1050,15 +1051,41 @@ esp_err_t mqtt_discovery_publish_buttons(void)
             cJSON_AddStringToObject(config, "command_topic", "~/command");
             cJSON_AddStringToObject(config, "icon", "mdi:clock-edit");
             cJSON_AddStringToObject(config, "availability_topic", "~/availability");
-            
+
             cJSON *device = create_device_json();
             if (device) cJSON_AddItemToObject(config, "device", device);
-            
+
             ret = publish_discovery_config("button", "set_time", config, true);
             cJSON_Delete(config);
         }
     }
-    
+
+    // TLC Hardware Reset Button (only publish if hardware reset is available)
+    if (tlc59116_has_hardware_reset()) {
+        cJSON *config = cJSON_CreateObject();
+        if (config) {
+            add_base_topic(config);
+            cJSON_AddStringToObject(config, "name", "Z5. Diagnostic: TLC Hardware Reset");
+            snprintf(unique_id, sizeof(unique_id), "%s_tlc_hw_reset", discovery_config.device_id);
+            cJSON_AddStringToObject(config, "unique_id", unique_id);
+            cJSON_AddStringToObject(config, "command_topic", "~/command");
+            cJSON_AddStringToObject(config, "payload_press", "tlc_hardware_reset");
+            cJSON_AddStringToObject(config, "icon", "mdi:restart-alert");
+            cJSON_AddStringToObject(config, "entity_category", "diagnostic");
+            cJSON_AddStringToObject(config, "availability_topic", "~/availability");
+
+            cJSON *device = create_device_json();
+            if (device) cJSON_AddItemToObject(config, "device", device);
+
+            ret = publish_discovery_config("button", "tlc_hw_reset", config, true);
+            cJSON_Delete(config);
+
+            ESP_LOGI(TAG, "✅ Published TLC Hardware Reset button (GPIO 4)");
+        }
+    } else {
+        ESP_LOGI(TAG, "TLC Hardware Reset button not published (feature unavailable)");
+    }
+
     return ret;
 }
 

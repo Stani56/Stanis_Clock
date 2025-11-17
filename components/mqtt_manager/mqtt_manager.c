@@ -1176,6 +1176,36 @@ static esp_err_t mqtt_handle_command(const char* payload, int payload_len) {
         ESP_LOGI(TAG, "ℹ️ Getting firmware version info...");
         mqtt_publish_ota_version();
     }
+    // TLC59116 Hardware Reset (GPIO 4)
+    else if (strcmp(command, "tlc_hardware_reset") == 0) {
+        if (!tlc59116_has_hardware_reset()) {
+            ESP_LOGW(TAG, "TLC hardware reset not available (hardware modification required)");
+            ESP_LOGW(TAG, "See CLAUDE.md for hardware modification instructions");
+            mqtt_publish_status("tlc_reset_not_available");
+            return ESP_ERR_NOT_SUPPORTED;
+        }
+
+        ESP_LOGI(TAG, "🔄 Manual TLC hardware reset requested via MQTT");
+        mqtt_publish_status("tlc_reset_starting");
+
+        if (tlc59116_hardware_reset_all() == ESP_OK) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+
+            if (tlc59116_init_all() == ESP_OK) {
+                ESP_LOGI(TAG, "✅ Manual hardware reset successful - devices re-initialized");
+                ESP_LOGI(TAG, "LED display will auto-restore on next update cycle");
+                mqtt_publish_status("tlc_reset_success");
+            } else {
+                ESP_LOGE(TAG, "❌ Re-initialization failed after hardware reset");
+                mqtt_publish_status("tlc_reset_reinit_failed");
+                return ESP_FAIL;
+            }
+        } else {
+            ESP_LOGE(TAG, "❌ Hardware reset failed");
+            mqtt_publish_status("tlc_reset_failed");
+            return ESP_FAIL;
+        }
+    }
     else {
         ESP_LOGW(TAG, "Unknown command: '%s'", command);
         mqtt_publish_status("unknown_command");

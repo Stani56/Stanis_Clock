@@ -1,8 +1,11 @@
 #include "i2c_devices.h"
+#include "board_config.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "thread_safety.h"
+#include "driver/gpio.h"
+#include "esp_rom_sys.h"
 #include <string.h>
 
 static const char *TAG = "i2c_devices";
@@ -23,6 +26,9 @@ static tlc59116_device_t tlc_devices[TLC59116_COUNT] = {0};
 const uint8_t tlc_addresses[TLC59116_COUNT] = {
     0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x69, 0x6A
 };
+
+// TLC59116 hardware reset state
+static bool tlc_reset_gpio_initialized = false;
 
 // Helper Functions
 static esp_err_t i2c_write_byte(i2c_port_t port, uint8_t device_addr, uint8_t reg_addr, uint8_t value)
@@ -162,7 +168,17 @@ esp_err_t i2c_devices_init(void)
         return ret;
     }
     ESP_LOGI(TAG, "BH1750 device added (0x%02X)", BH1750_ADDR);
-    
+
+    // Initialize TLC59116 hardware reset GPIO (must be done before init_all)
+    ret = tlc59116_reset_gpio_init();
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "TLC hardware reset GPIO initialized successfully");
+    } else if (ret == ESP_ERR_NOT_SUPPORTED) {
+        ESP_LOGI(TAG, "TLC hardware reset not available (hardware modification required)");
+    } else {
+        ESP_LOGW(TAG, "TLC hardware reset GPIO init failed: %s", esp_err_to_name(ret));
+    }
+
     // Initialize all TLC59116 devices
     ret = tlc59116_init_all();
     if (ret != ESP_OK) {
@@ -1009,5 +1025,94 @@ esp_err_t tlc_read_error_flags(uint8_t eflag_values[10][2])
              success_count, errors_found ? "YES" : "NO");
 
     return errors_found ? ESP_FAIL : ret;
+}
+
+// ============================================================================
+// TLC59116 Hardware Reset Functions (GPIO 4 - Shared Reset Line)
+// ============================================================================
+
+esp_err_t tlc59116_reset_gpio_init(void)
+{
+#if BOARD_TLC_HW_RESET_AVAILABLE
+    ESP_LOGI(TAG, "Initializing TLC59116 hardware reset on GPIO %d", BOARD_TLC_RESET_GPIO);
+
+    // Configure GPIO 4 as open-drain output with external pull-up
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << BOARD_TLC_RESET_GPIO),
+        .mode = GPIO_MODE_OUTPUT_OD,  // Open-drain mode (requires external pull-up)
+        .pull_up_en = GPIO_PULLUP_DISABLE,  // External 10kΩ pull-up resistor
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+
+    esp_err_t ret = gpio_config(&io_conf);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to configure TLC RESET GPIO: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    // Release RESET (HIGH via external pull-up)
+    // Open-drain HIGH = tri-state (pulled HIGH by external resistor)
+    gpio_set_level(BOARD_TLC_RESET_GPIO, 1);
+
+    tlc_reset_gpio_initialized = true;
+    ESP_LOGI(TAG, "✅ TLC hardware reset initialized (shared RESET line for all 10 devices)");
+    ESP_LOGI(TAG, "   GPIO %d configured as open-drain output", BOARD_TLC_RESET_GPIO);
+    ESP_LOGI(TAG, "   Reset pulse: %dµs, Stabilization: %dms",
+             BOARD_TLC_RESET_PULSE_US, BOARD_TLC_RESET_STABILIZE_MS);
+
+    return ESP_OK;
+#else
+    ESP_LOGW(TAG, "TLC hardware reset not available (BOARD_TLC_HW_RESET_AVAILABLE=0)");
+    ESP_LOGW(TAG, "Hardware modification required - see board_config.h for instructions");
+    return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
+
+esp_err_t tlc59116_hardware_reset_all(void)
+{
+#if BOARD_TLC_HW_RESET_AVAILABLE
+    if (!tlc_reset_gpio_initialized) {
+        ESP_LOGE(TAG, "Hardware reset GPIO not initialized - call tlc59116_reset_gpio_init() first");
+        return ESP_FAIL;
+    }
+
+    ESP_LOGW(TAG, "🔄 Performing hardware reset of all 10 TLC59116 devices...");
+    ESP_LOGW(TAG, "   Asserting RESET (LOW) for %dµs on GPIO %d",
+             BOARD_TLC_RESET_PULSE_US, BOARD_TLC_RESET_GPIO);
+
+    // Assert RESET (active LOW) for 10µs
+    // TLC59116 datasheet: minimum 50ns pulse width
+    gpio_set_level(BOARD_TLC_RESET_GPIO, 0);
+    esp_rom_delay_us(BOARD_TLC_RESET_PULSE_US);
+
+    // Release RESET (HIGH via external pull-up)
+    gpio_set_level(BOARD_TLC_RESET_GPIO, 1);
+
+    ESP_LOGI(TAG, "   RESET released, waiting %dms for stabilization...",
+             BOARD_TLC_RESET_STABILIZE_MS);
+
+    // Wait for chip stabilization
+    // TLC59116 datasheet: minimum 1ms required
+    vTaskDelay(pdMS_TO_TICKS(BOARD_TLC_RESET_STABILIZE_MS));
+
+    ESP_LOGI(TAG, "✅ TLC hardware reset complete");
+    ESP_LOGI(TAG, "   All 10 devices reset, re-initialization required");
+
+    return ESP_OK;
+#else
+    ESP_LOGE(TAG, "Hardware reset not available (feature disabled)");
+    ESP_LOGE(TAG, "Enable BOARD_TLC_HW_RESET_AVAILABLE in board_config.h");
+    return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
+
+bool tlc59116_has_hardware_reset(void)
+{
+#if BOARD_TLC_HW_RESET_AVAILABLE
+    return tlc_reset_gpio_initialized;
+#else
+    return false;
+#endif
 }
 

@@ -179,6 +179,34 @@ esp_err_t mqtt_handle_basic_commands(const char* command)
     // Reason: ESP32 cannot handle WiFi+MQTT+I2S concurrently
     // These will be re-enabled on ESP32-S3 hardware
 
+    // TLC59116 hardware reset command (GPIO 4)
+    else if (strcmp(command, "tlc_hardware_reset") == 0) {
+        if (!tlc59116_has_hardware_reset()) {
+            ESP_LOGW(TAG, "TLC hardware reset not available (hardware modification required)");
+            ESP_LOGW(TAG, "See CLAUDE.md for hardware modification instructions");
+            return ESP_ERR_NOT_SUPPORTED;
+        }
+
+        ESP_LOGI(TAG, "🔄 Manual TLC hardware reset requested via MQTT");
+
+        if (tlc59116_hardware_reset_all() == ESP_OK) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+
+            if (tlc59116_init_all() == ESP_OK) {
+                ESP_LOGI(TAG, "✅ Manual hardware reset successful - devices re-initialized");
+                ESP_LOGI(TAG, "LED display will auto-restore on next update cycle");
+
+                return ESP_OK;
+            } else {
+                ESP_LOGE(TAG, "❌ Re-initialization failed after hardware reset");
+                return ESP_FAIL;
+            }
+        } else {
+            ESP_LOGE(TAG, "❌ Hardware reset failed");
+            return ESP_FAIL;
+        }
+    }
+
     ESP_LOGW(TAG, "Unknown command: %s", command);
     return ESP_ERR_NOT_FOUND;
 }

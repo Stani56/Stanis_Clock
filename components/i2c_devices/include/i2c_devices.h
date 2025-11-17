@@ -126,6 +126,75 @@ esp_err_t tlc_read_all_pwm_values(uint8_t hardware_state[10][16]);
 esp_err_t tlc_read_global_brightness(uint8_t grppwm_values[10]);
 esp_err_t tlc_read_error_flags(uint8_t eflag_values[10][2]);
 
+// TLC59116 Hardware Reset Functions (GPIO 4 - Shared Reset Line)
+/**
+ * @brief Initialize TLC59116 hardware reset GPIO
+ *
+ * Configures GPIO 4 as open-drain output with external pull-up.
+ * Only functional if BOARD_TLC_HW_RESET_AVAILABLE is enabled.
+ *
+ * Hardware Requirements:
+ * - External 10kΩ pull-up resistor from GPIO 4 to 3.3V
+ * - GPIO 4 connected to Pin 2 (RESET) on all 10 TLC59116 devices
+ *
+ * Must be called during system initialization before tlc59116_init_all().
+ *
+ * @return ESP_OK on success
+ *         ESP_ERR_NOT_SUPPORTED if hardware reset feature disabled
+ *         ESP_FAIL if GPIO configuration failed
+ */
+esp_err_t tlc59116_reset_gpio_init(void);
+
+/**
+ * @brief Perform hardware reset of all TLC59116 devices
+ *
+ * Asserts shared RESET line (active LOW) for 10µs, then releases and waits 5ms
+ * for all devices to stabilize.
+ *
+ * ⚠️ WARNING: This resets ALL 10 TLC59116 devices simultaneously.
+ * All LEDs will turn off. Re-initialization required after reset.
+ *
+ * Reset Timing:
+ * - 10µs LOW pulse on GPIO 4 (datasheet minimum: 50ns)
+ * - 5ms stabilization delay (datasheet minimum: 1ms)
+ * - Total hardware reset time: ~5.01ms
+ *
+ * Use Cases:
+ * - Recovery from frozen TLC state after ESP32 watchdog reset
+ * - Recovery from I2C bus lockup
+ * - Post-power-surge TLC state restoration
+ * - Manual reset via MQTT command
+ * - Preventive reset during post-reset validation
+ *
+ * Typical Recovery Sequence:
+ * 1. Call tlc59116_hardware_reset_all() - 5ms
+ * 2. Call tlc59116_init_all() - 50ms
+ * 3. Restore LED display state - automatic
+ * Total recovery time: ~55ms
+ *
+ * @return ESP_OK on success
+ *         ESP_ERR_NOT_SUPPORTED if hardware reset not available
+ *         ESP_FAIL if GPIO not initialized
+ */
+esp_err_t tlc59116_hardware_reset_all(void);
+
+/**
+ * @brief Check if hardware reset capability is available
+ *
+ * Returns true only if:
+ * 1. BOARD_TLC_HW_RESET_AVAILABLE is enabled (compile-time)
+ * 2. GPIO has been successfully initialized (runtime)
+ *
+ * Use this function to conditionally enable hardware reset features:
+ * - MQTT command handler
+ * - Home Assistant button entity
+ * - LED validation enhanced recovery
+ *
+ * @return true if hardware reset is available and initialized
+ *         false if feature disabled or GPIO not initialized
+ */
+bool tlc59116_has_hardware_reset(void);
+
 // DS3231 Functions
 esp_err_t ds3231_init(void);
 esp_err_t ds3231_get_time_struct(wordclock_time_t *time);

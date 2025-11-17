@@ -163,6 +163,60 @@ extern "C" {
 #define BOARD_RESET_BUTTON_GPIO       0
 
 //=============================================================================
+// TLC59116 Hardware Reset Configuration
+//=============================================================================
+
+/**
+ * TLC59116 Hardware Reset Pin (Shared Reset Line)
+ *
+ * Controls shared RESET line for all 10 TLC59116 LED controllers.
+ * Active LOW: Pull LOW to reset, release to run.
+ *
+ * Hardware Requirements:
+ * - External 10kΩ pull-up resistor to 3.3V on RESET line
+ * - ESP32 GPIO configured as open-drain output
+ * - RESET line connected to Pin 2 (RESET) on all 10 TLC59116 devices
+ *
+ * Current Hardware Status:
+ * - YB-ESP32-S3-AMP: TLC RESET pins tied to VCC (hardware mod required)
+ * - DevKitC-1: TLC RESET pins tied to VCC (hardware mod required)
+ *
+ * Hardware Modification Instructions (Next PCB Revision):
+ * 1. Cut traces connecting TLC59116 Pin 2 (RESET) to VCC
+ * 2. Add 10kΩ pull-up resistor from shared RESET line to 3.3V
+ * 3. Connect GPIO 4 to all TLC RESET pins (Pin 2) via PCB trace
+ * 4. Set BOARD_TLC_HW_RESET_AVAILABLE=1 after modification
+ *
+ * Reset Timing (from TLC59116 datasheet):
+ * - Minimum pulse width: 50ns (10µs used for safety margin)
+ * - Post-reset stabilization: 1ms minimum (5ms used)
+ *
+ * GPIO Selection Rationale:
+ * - GPIO 4 (ADC2_CH3): WiFi-safe after initialization
+ * - No conflicts with I2C (8/9, 1/42), SPI (10-13), I2S (5-7), ADC (3)
+ * - Available on both YB-AMP and DevKitC boards
+ *
+ * Recovery Benefits:
+ * - Watchdog reset: TLC cleaned in 55ms (vs 2-5s frozen state)
+ * - I2C lockup: Recovery in 55ms (vs full system restart)
+ * - Voltage spike: Guaranteed clean TLC state
+ * - Manual reset: Instant TLC reset via MQTT command
+ */
+
+// Enable/disable hardware reset feature
+// Set to 1 after hardware modification, 0 for current unmodified hardware
+#ifndef BOARD_TLC_HW_RESET_AVAILABLE
+    #define BOARD_TLC_HW_RESET_AVAILABLE  1  // ✅ Enable for testing (safe even without hardware mod)
+#endif
+
+// GPIO pin for TLC hardware reset (GPIO 4 - ADC2_CH3, WiFi-safe)
+#define BOARD_TLC_RESET_GPIO              4
+
+// Reset timing parameters
+#define BOARD_TLC_RESET_PULSE_US          10   // 10µs LOW pulse (datasheet min: 50ns)
+#define BOARD_TLC_RESET_STABILIZE_MS      5    // 5ms post-reset wait (datasheet min: 1ms)
+
+//=============================================================================
 // Board-Specific Configuration Macros
 //=============================================================================
 

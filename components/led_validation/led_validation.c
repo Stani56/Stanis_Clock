@@ -775,7 +775,42 @@ bool recover_hardware_fault(const validation_result_enhanced_t *result)
 
 bool recover_i2c_bus_failure(void)
 {
-    ESP_LOGE(TAG, "Attempting I2C bus recovery - reinitializing all devices");
+    ESP_LOGE(TAG, "Attempting I2C bus recovery");
+
+    // STEP 1: Try hardware reset if available (fastest and most reliable)
+    if (tlc59116_has_hardware_reset()) {
+        ESP_LOGW(TAG, "Step 1: Hardware reset of all TLC devices");
+
+        if (tlc59116_hardware_reset_all() == ESP_OK) {
+            vTaskDelay(pdMS_TO_TICKS(10));  // Additional stabilization
+
+            // Re-initialize all devices after hardware reset
+            if (tlc59116_init_all() == ESP_OK) {
+                ESP_LOGI(TAG, "✅ Hardware reset successful, devices re-initialized");
+
+                // Verify recovery
+                uint8_t test_pwm[16];
+                uint8_t success_count = 0;
+                for (uint8_t i = 0; i < 10; i++) {
+                    if (tlc_read_pwm_values(i, test_pwm) == ESP_OK) {
+                        success_count++;
+                    }
+                }
+
+                ESP_LOGI(TAG, "Hardware reset recovery: %d/10 devices responsive", success_count);
+
+                if (success_count >= 8) {
+                    // Recovery successful - LED display will auto-restore on next update
+                    return true;
+                }
+            }
+        }
+
+        ESP_LOGW(TAG, "Hardware reset failed, falling back to software recovery");
+    }
+
+    // STEP 2: Software-only recovery (existing method)
+    ESP_LOGE(TAG, "Step 2: Software re-initialization");
 
     vTaskDelay(pdMS_TO_TICKS(100));
 
@@ -792,7 +827,7 @@ bool recover_i2c_bus_failure(void)
         }
     }
 
-    ESP_LOGI(TAG, "I2C recovery: %d/10 devices responsive", success_count);
+    ESP_LOGI(TAG, "Software recovery: %d/10 devices responsive", success_count);
     return (success_count >= 8);
 }
 
