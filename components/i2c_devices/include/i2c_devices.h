@@ -126,6 +126,13 @@ esp_err_t tlc_read_all_pwm_values(uint8_t hardware_state[10][16]);
 esp_err_t tlc_read_global_brightness(uint8_t grppwm_values[10]);
 esp_err_t tlc_read_error_flags(uint8_t eflag_values[10][2]);
 
+// TLC59116 Low-Level Register Access
+esp_err_t tlc_read_register(uint8_t tlc_index, uint8_t reg_addr, uint8_t *value);
+
+// TLC59116 Hardware Reset Detection (Power Surge Recovery)
+uint8_t tlc_detect_hardware_reset(bool reset_devices[TLC59116_COUNT]);
+esp_err_t tlc_automatic_recovery(void);
+
 // TLC59116 Hardware Reset Functions (GPIO 4 - Shared Reset Line)
 /**
  * @brief Initialize TLC59116 hardware reset GPIO

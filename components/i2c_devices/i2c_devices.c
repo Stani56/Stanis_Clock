@@ -1116,3 +1116,158 @@ bool tlc59116_has_hardware_reset(void)
 #endif
 }
 
+//=============================================================================
+// TLC59116 Hardware Reset Detection (Power Surge Recovery)
+//=============================================================================
+
+/**
+ * @brief Read a single register from TLC59116
+ *
+ * This is a LOW-LEVEL function that reads hardware state directly.
+ * Even if RAM is corrupted, the TLC chip holds the truth.
+ *
+ * @param tlc_index Device index (0-9)
+ * @param reg_addr Register address (0x00-0x1B)
+ * @param value Output: register value read
+ * @return ESP_OK on success, ESP_FAIL on I2C error
+ */
+esp_err_t tlc_read_register(uint8_t tlc_index, uint8_t reg_addr, uint8_t *value)
+{
+    if (tlc_index >= TLC59116_COUNT || value == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Get device handle
+    i2c_master_dev_handle_t dev_handle = tlc_dev_handles[tlc_index];
+    if (dev_handle == NULL) {
+        ESP_LOGE(TAG, "TLC device %d not initialized", tlc_index);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    // I2C read with thread safety
+    thread_safe_i2c_lock(pdMS_TO_TICKS(1000));
+    esp_err_t ret = i2c_master_transmit_receive(
+        dev_handle,
+        &reg_addr, 1,      // Write register address
+        value, 1,          // Read 1 byte
+        pdMS_TO_TICKS(100) // 100ms timeout
+    );
+    thread_safe_i2c_unlock();
+
+    return ret;
+}
+
+/**
+ * @brief Check if TLC controllers have been reset to hardware defaults
+ *
+ * CRITICAL: This function reads HARDWARE state, not RAM variables.
+ * If MODE1 register = 0x01, the TLC chip was reset, regardless of
+ * what our software thinks the state is.
+ *
+ * TLC59116 MODE1 register values:
+ * - 0x01 = Hardware default after power-on/reset (OSC bit set)
+ * - 0x00 = Normal operation (our init sets this)
+ * - 0x81 = Sleep mode (if we use it)
+ *
+ * @param reset_devices Output: Array of bools indicating which devices were reset
+ * @return Number of devices detected as reset (0 = all good)
+ */
+uint8_t tlc_detect_hardware_reset(bool reset_devices[TLC59116_COUNT])
+{
+    uint8_t reset_count = 0;
+
+    ESP_LOGI(TAG, "🔍 Checking TLC controllers for hardware reset...");
+
+    for (uint8_t i = 0; i < TLC59116_COUNT; i++) {
+        reset_devices[i] = false;
+
+        uint8_t mode1_value = 0;
+        esp_err_t ret = tlc_read_register(i, TLC59116_MODE1, &mode1_value);
+
+        if (ret == ESP_OK) {
+            // Check if MODE1 is at hardware default (0x01)
+            // Bit 4 (OSC/SLEEP) = 1 is the key indicator of reset state
+            if (mode1_value == 0x01 || (mode1_value & 0x10)) {
+                ESP_LOGW(TAG, "  Device %d: MODE1=0x%02X → RESET DETECTED!", i, mode1_value);
+                reset_devices[i] = true;
+                reset_count++;
+            } else {
+                ESP_LOGD(TAG, "  Device %d: MODE1=0x%02X → OK (initialized)", i, mode1_value);
+            }
+        } else {
+            ESP_LOGW(TAG, "  Device %d: Failed to read MODE1 (I2C error)", i);
+            // Don't count as reset - might just be I2C glitch
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(2)); // Small delay between reads
+    }
+
+    if (reset_count > 0) {
+        ESP_LOGE(TAG, "⚠️  TLC RESET DETECTED: %d/%d devices", reset_count, TLC59116_COUNT);
+    } else {
+        ESP_LOGD(TAG, "✅ All TLC controllers in initialized state");
+    }
+
+    return reset_count;
+}
+
+/**
+ * @brief Recover from TLC hardware reset
+ *
+ * This is the AUTOMATIC recovery that runs when reset is detected.
+ * Same logic as manual tlc_hardware_reset MQTT command.
+ *
+ * Steps:
+ * 1. Turn off all LEDs (clear corrupted state)
+ * 2. Re-initialize all TLC devices
+ * 3. Clear software LED cache
+ * 4. Refresh current display
+ *
+ * @return ESP_OK on success
+ */
+esp_err_t tlc_automatic_recovery(void)
+{
+    ESP_LOGE(TAG, "🔧 Starting AUTOMATIC TLC recovery...");
+
+    // Publish to MQTT so user knows recovery is happening
+    extern void mqtt_publish_status(const char *status);
+    mqtt_publish_status("tlc_auto_recovery_start");
+
+    // Step 1: Turn off all LEDs (clear any corrupted state)
+    ESP_LOGI(TAG, "  Step 1/4: Clearing all LEDs...");
+    tlc_turn_off_all_leds();
+    vTaskDelay(pdMS_TO_TICKS(20));
+
+    // Step 2: Re-initialize all TLC devices
+    ESP_LOGI(TAG, "  Step 2/4: Re-initializing TLC controllers...");
+    for (uint8_t i = 0; i < TLC59116_COUNT; i++) {
+        esp_err_t ret = tlc59116_init_device(i);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "    Device %d init failed: %s", i, esp_err_to_name(ret));
+        }
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+
+    // Step 3: Clear software LED state cache
+    ESP_LOGI(TAG, "  Step 3/4: Clearing software LED cache...");
+    extern uint8_t led_state[10][16];
+    memset(led_state, 0, 10 * 16 * sizeof(uint8_t));
+
+    // Step 4: Refresh current display
+    ESP_LOGI(TAG, "  Step 4/4: Refreshing display...");
+    extern esp_err_t ds3231_get_time_struct(wordclock_time_t *time);
+    extern esp_err_t display_german_time(const wordclock_time_t *time);
+
+    wordclock_time_t current_time;
+    if (ds3231_get_time_struct(&current_time) == ESP_OK) {
+        display_german_time(&current_time);
+        ESP_LOGI(TAG, "✅ Automatic TLC recovery COMPLETE");
+        mqtt_publish_status("tlc_auto_recovery_success");
+        return ESP_OK;
+    } else {
+        ESP_LOGE(TAG, "❌ Failed to read RTC for display refresh");
+        mqtt_publish_status("tlc_auto_recovery_partial");
+        return ESP_FAIL;
+    }
+}
+

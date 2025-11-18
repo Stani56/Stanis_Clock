@@ -2,6 +2,7 @@
 #include "i2c_devices.h"
 #include "wordclock_display.h"  // For build_led_state_matrix() and led_state[]
 #include "wordclock_time.h"     // For wordclock_time_t
+#include "wordclock_transitions.h" // For display_german_time_with_transitions()
 #include "thread_safety.h"      // For LED state mutex functions
 #include "transition_manager.h" // For transition_manager_is_active()
 #include "mqtt_manager.h"       // For MQTT publishing
@@ -317,17 +318,19 @@ validation_result_enhanced_t validate_display_with_hardware(
     // LEVEL 3: Hardware Fault Detection
     // ========================================================================
 
+    // EFLAG validation disabled: ~90 unpopulated LED outputs cause false open-circuit errors
+    // PWM readback (Level 2) is sufficient for detecting actual LED failures
+    // See: docs/implementation/led-validation/LED_VALIDATION_HARDWARE_READBACK.md
+
+    // Still read EFLAG for diagnostic purposes (published to MQTT), but don't fail validation
     esp_err_t eflag_ret = tlc_read_error_flags(result.eflag_values);
+    (void)eflag_ret;  // Suppress unused variable warning
 
-    if (eflag_ret == ESP_FAIL) {
-        result.hardware_faults_detected = true;
-
-        // Count devices with faults
-        for (uint8_t i = 0; i < 10; i++) {
-            if (result.eflag_values[i][0] != 0 ||
-                result.eflag_values[i][1] != 0) {
-                result.devices_with_faults++;
-            }
+    // Count devices with EFLAG errors for diagnostic reporting only
+    for (uint8_t i = 0; i < 10; i++) {
+        if (result.eflag_values[i][0] != 0 || result.eflag_values[i][1] != 0) {
+            result.devices_with_faults++;
+            // Note: This is reported but does NOT fail validation
         }
     }
 
@@ -343,17 +346,17 @@ validation_result_enhanced_t validate_display_with_hardware(
         }
     }
 
-    ESP_LOGI(TAG, "Level 3 (Faults): hardware_faults=%s, grppwm_mismatch=%s",
-             result.hardware_faults_detected ? "YES" : "NO",
-             result.grppwm_mismatch ? "YES" : "NO");
+    ESP_LOGI(TAG, "Level 3 (GRPPWM Check): grppwm_mismatch=%s, eflag_devices_with_errors=%d (diagnostic only)",
+             result.grppwm_mismatch ? "YES" : "NO",
+             result.devices_with_faults);
 
     // ========================================================================
     // Overall Validation Result
     // ========================================================================
 
+    // Note: hardware_faults_detected is NOT checked - EFLAG validation disabled
     result.is_valid = result.software_valid &&
                       result.hardware_valid &&
-                      !result.hardware_faults_detected &&
                       !result.grppwm_mismatch;
 
     uint32_t end_time = xTaskGetTickCount() * portTICK_PERIOD_MS;
@@ -380,10 +383,8 @@ failure_type_t classify_failure(const validation_result_enhanced_t *result)
         return FAILURE_NONE;
     }
 
-    // CRITICAL: Hardware fault detected (LED open/short circuit)
-    if (result->hardware_faults_detected) {
-        return FAILURE_HARDWARE_FAULT;
-    }
+    // EFLAG validation disabled - hardware_faults_detected no longer fails validation
+    // (Unpopulated LED outputs cause false open-circuit errors)
 
     // CRITICAL: Complete I2C bus failure (cannot read any device)
     if (result->hardware_read_failures >= 10) {
@@ -800,7 +801,12 @@ bool recover_i2c_bus_failure(void)
                 ESP_LOGI(TAG, "Hardware reset recovery: %d/10 devices responsive", success_count);
 
                 if (success_count >= 8) {
-                    // Recovery successful - LED display will auto-restore on next update
+                    // Force LED state refresh: Hardware reset clears all TLC PWM registers to 0,
+                    // but software's cached led_state[][] still has old values.
+                    // Clear the cache so next display update sees all LEDs as needing update.
+                    ESP_LOGI(TAG, "🔄 Clearing LED state cache...");
+                    memset(led_state, 0, sizeof(led_state));
+                    ESP_LOGI(TAG, "✅ Recovery successful - display will refresh on next cycle");
                     return true;
                 }
             }
@@ -828,7 +834,17 @@ bool recover_i2c_bus_failure(void)
     }
 
     ESP_LOGI(TAG, "Software recovery: %d/10 devices responsive", success_count);
-    return (success_count >= 8);
+
+    if (success_count >= 8) {
+        // Force LED state refresh after software re-init
+        // Clear the cache so next display update sees all LEDs as needing update
+        ESP_LOGI(TAG, "🔄 Clearing LED state cache...");
+        memset(led_state, 0, sizeof(led_state));
+        ESP_LOGI(TAG, "✅ Recovery successful - display will refresh on next cycle");
+        return true;
+    }
+
+    return false;
 }
 
 bool recover_grppwm_mismatch(const validation_result_enhanced_t *result)
@@ -1318,6 +1334,137 @@ esp_err_t trigger_validation_post_transition(void)
             stats.systematic_mismatch_count, stats.partial_mismatch_count,
             stats.grppwm_mismatch_count, stats.software_error_count);
         mqtt_publish_validation_statistics(stats_json);
+    }
+
+    // ========================================================================
+    // Automatic Recovery on Failure
+    // ========================================================================
+
+    ESP_LOGI(TAG, "DEBUG: About to check recovery - failure=%d (%s)", failure, get_failure_type_name(failure));
+
+    // Publish debug info to MQTT so we can see it even after USB disconnect
+    char debug_msg[128];
+    snprintf(debug_msg, sizeof(debug_msg), "Recovery check: failure=%d (%s)", failure, get_failure_type_name(failure));
+    mqtt_publish_status(debug_msg);
+
+    if (failure != FAILURE_NONE) {
+        ESP_LOGW(TAG, "🔧 Triggering automatic recovery for failure: %s", get_failure_type_name(failure));
+        mqtt_publish_status("recovery_starting");
+
+        // Increment recovery attempts counter
+        if (xSemaphoreTake(g_stats_mutex, MUTEX_TIMEOUT_TICKS) == pdTRUE) {
+            g_statistics.recovery_attempts++;
+            xSemaphoreGive(g_stats_mutex);
+        }
+
+        bool recovery_success = false;
+
+        // Attempt recovery based on failure type
+        switch (failure) {
+            case FAILURE_I2C_BUS_FAILURE:
+                ESP_LOGE(TAG, "I2C bus failure detected - attempting full bus recovery");
+                recovery_success = recover_i2c_bus_failure();
+                break;
+
+            case FAILURE_SYSTEMATIC_MISMATCH:
+            case FAILURE_PARTIAL_MISMATCH:
+                ESP_LOGW(TAG, "Hardware mismatch detected - attempting targeted recovery");
+                recovery_success = recover_hardware_mismatch(&result);
+                break;
+
+            case FAILURE_GRPPWM_MISMATCH:
+                ESP_LOGW(TAG, "Global brightness mismatch detected - attempting GRPPWM recovery");
+                recovery_success = recover_grppwm_mismatch(&result);
+                break;
+
+            case FAILURE_SOFTWARE_ERROR:
+                ESP_LOGW(TAG, "Software state error - clearing LED state cache");
+                memset(led_state, 0, sizeof(led_state));
+                recovery_success = true;
+                break;
+
+            case FAILURE_HARDWARE_FAULT:
+                ESP_LOGE(TAG, "Hardware fault detected (EFLAG) - attempting hardware reset");
+                recovery_success = recover_hardware_fault(&result);
+                break;
+
+            default:
+                ESP_LOGW(TAG, "Unknown failure type - no recovery action");
+                break;
+        }
+
+        if (recovery_success) {
+            ESP_LOGI(TAG, "✅ Automatic recovery SUCCESSFUL");
+
+            // Update statistics
+            if (xSemaphoreTake(g_stats_mutex, MUTEX_TIMEOUT_TICKS) == pdTRUE) {
+                g_statistics.recovery_successes++;
+                g_statistics.consecutive_failures = 0;  // Reset on successful recovery
+                xSemaphoreGive(g_stats_mutex);
+            }
+
+            // Immediately refresh display after successful recovery
+            // CRITICAL: Must do FULL hardware rewrite, not differential update
+            // The validation compared hardware vs software cache, so after fixing
+            // only the detected mismatches, the caches match but hardware might
+            // still have other corrupted LEDs. Solution: Clear everything and rewrite.
+            ESP_LOGI(TAG, "🔄 Forcing full display rewrite after recovery...");
+
+            // Wait for any active transitions to complete first
+            while (transition_manager_is_active()) {
+                vTaskDelay(pdMS_TO_TICKS(50));
+            }
+
+            // Step 1: Turn off ALL hardware LEDs (clears corrupted state)
+            ESP_LOGI(TAG, "   Step 1: Clearing all hardware LEDs...");
+            if (tlc_turn_off_all_leds() != ESP_OK) {
+                ESP_LOGE(TAG, "   ❌ Failed to clear hardware LEDs");
+            }
+            vTaskDelay(pdMS_TO_TICKS(20));  // Allow TLC to process
+
+            // Step 2: Clear software cache (forces differential update to rewrite everything)
+            ESP_LOGI(TAG, "   Step 2: Clearing software LED cache...");
+            // Clear the entire led_state array (WORDCLOCK_ROWS=10, WORDCLOCK_COLS=16)
+            memset(led_state, 0, WORDCLOCK_ROWS * WORDCLOCK_COLS * sizeof(uint8_t));
+
+            // Step 3: Display current time (will write from scratch since cache is 0)
+            ESP_LOGI(TAG, "   Step 3: Displaying current time (full rewrite)...");
+            wordclock_time_t current_time;
+            if (ds3231_get_time_struct(&current_time) == ESP_OK) {
+                // Use instant display (no transitions) to avoid state conflicts
+                display_german_time(&current_time);
+                ESP_LOGI(TAG, "✅ Full display rewrite complete after recovery");
+            } else {
+                ESP_LOGW(TAG, "⚠️  Failed to read RTC for display refresh");
+            }
+
+            // Publish recovery success
+            mqtt_publish_status("validation_recovery_success");
+        } else {
+            ESP_LOGE(TAG, "❌ Automatic recovery FAILED");
+
+            // Update statistics
+            if (xSemaphoreTake(g_stats_mutex, MUTEX_TIMEOUT_TICKS) == pdTRUE) {
+                g_statistics.recovery_failures++;
+                xSemaphoreGive(g_stats_mutex);
+            }
+
+            // Publish recovery failure
+            mqtt_publish_status("validation_recovery_failed");
+
+            // Check if we should restart system (last resort)
+            if (xSemaphoreTake(g_config_mutex, MUTEX_TIMEOUT_TICKS) == pdTRUE) {
+                bool should_restart = should_restart_on_failure(&g_config, failure);
+                xSemaphoreGive(g_config_mutex);
+
+                if (should_restart) {
+                    ESP_LOGE(TAG, "⚠️  Recovery failed and auto-restart enabled - restarting system in 5 seconds");
+                    mqtt_publish_status("system_auto_restart");
+                    vTaskDelay(pdMS_TO_TICKS(5000));  // Allow MQTT publish to complete
+                    esp_restart();
+                }
+            }
+        }
     }
 
     ESP_LOGI(TAG, "=== POST-TRANSITION VALIDATION COMPLETE ===");

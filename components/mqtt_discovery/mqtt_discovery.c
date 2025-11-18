@@ -1065,13 +1065,12 @@ esp_err_t mqtt_discovery_publish_buttons(void)
         cJSON *config = cJSON_CreateObject();
         if (config) {
             add_base_topic(config);
-            cJSON_AddStringToObject(config, "name", "Z5. Diagnostic: TLC Hardware Reset");
+            cJSON_AddStringToObject(config, "name", "Z5. Action: TLC Hardware Reset");
             snprintf(unique_id, sizeof(unique_id), "%s_tlc_hw_reset", discovery_config.device_id);
             cJSON_AddStringToObject(config, "unique_id", unique_id);
             cJSON_AddStringToObject(config, "command_topic", "~/command");
             cJSON_AddStringToObject(config, "payload_press", "tlc_hardware_reset");
             cJSON_AddStringToObject(config, "icon", "mdi:restart-alert");
-            cJSON_AddStringToObject(config, "entity_category", "diagnostic");
             cJSON_AddStringToObject(config, "availability_topic", "~/availability");
 
             cJSON *device = create_device_json();
@@ -1079,6 +1078,7 @@ esp_err_t mqtt_discovery_publish_buttons(void)
 
             ret = publish_discovery_config("button", "tlc_hw_reset", config, true);
             cJSON_Delete(config);
+            if (ret != ESP_OK) return ret;
 
             ESP_LOGI(TAG, "✅ Published TLC Hardware Reset button (GPIO 4)");
         }
@@ -1227,7 +1227,7 @@ esp_err_t mqtt_discovery_publish_brightness_config(void)
         cJSON *config = cJSON_CreateObject();
         if (config) {
             add_base_topic(config);
-            cJSON_AddStringToObject(config, "name", "Z5. Action: Reset Brightness Config");
+            cJSON_AddStringToObject(config, "name", "Z6. Action: Reset Brightness Config");
             snprintf(unique_id, sizeof(unique_id), "%s_reset_brightness", discovery_config.device_id);
             cJSON_AddStringToObject(config, "unique_id", unique_id);
             cJSON_AddStringToObject(config, "command_topic", "~/brightness/config/reset");
@@ -1421,7 +1421,7 @@ esp_err_t mqtt_discovery_publish_ota_controls(void)
         if (config == NULL) return ESP_ERR_NO_MEM;
 
         add_base_topic(config);
-        cJSON_AddStringToObject(config, "name", "Z6. Action: Check for Updates");
+        cJSON_AddStringToObject(config, "name", "Z7. Action: Check for Updates");
         snprintf(unique_id, sizeof(unique_id), "%s_ota_check", discovery_config.device_id);
         cJSON_AddStringToObject(config, "unique_id", unique_id);
         cJSON_AddStringToObject(config, "command_topic", "~/command");
@@ -1445,7 +1445,7 @@ esp_err_t mqtt_discovery_publish_ota_controls(void)
         if (config == NULL) return ESP_ERR_NO_MEM;
 
         add_base_topic(config);
-        cJSON_AddStringToObject(config, "name", "Z7. Action: Start Update");
+        cJSON_AddStringToObject(config, "name", "Z8. Action: Start Update");
         snprintf(unique_id, sizeof(unique_id), "%s_ota_start", discovery_config.device_id);
         cJSON_AddStringToObject(config, "unique_id", unique_id);
         cJSON_AddStringToObject(config, "command_topic", "~/command");
@@ -1470,7 +1470,7 @@ esp_err_t mqtt_discovery_publish_ota_controls(void)
         if (config == NULL) return ESP_ERR_NO_MEM;
 
         add_base_topic(config);
-        cJSON_AddStringToObject(config, "name", "Z8. Action: Cancel Update");
+        cJSON_AddStringToObject(config, "name", "Z9. Action: Cancel Update");
         snprintf(unique_id, sizeof(unique_id), "%s_ota_cancel", discovery_config.device_id);
         cJSON_AddStringToObject(config, "unique_id", unique_id);
         cJSON_AddStringToObject(config, "command_topic", "~/command");

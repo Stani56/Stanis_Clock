@@ -391,6 +391,37 @@ static void test_live_word_clock(void) {
     while (1) {
         loop_count++;
 
+        // ====================================================================
+        // CRITICAL: Check TLC hardware state FIRST, before any other logic
+        // This detects power surge-induced resets by reading MODE1 registers
+        // ====================================================================
+        if (loop_count % 1 == 0) {  // Check every cycle (every 5 seconds)
+            bool reset_devices[10] = {false};
+            uint8_t reset_count = tlc_detect_hardware_reset(reset_devices);
+
+            if (reset_count > 0) {
+                // TLC RESET DETECTED - hardware truth, not RAM variable!
+                ESP_LOGE(TAG, "⚠️⚠️⚠️ TLC HARDWARE RESET DETECTED ⚠️⚠️⚠️");
+
+                // Trigger automatic recovery
+                esp_err_t recovery_ret = tlc_automatic_recovery();
+
+                if (recovery_ret == ESP_OK) {
+                    ESP_LOGI(TAG, "Recovery successful - continuing normal operation");
+                } else {
+                    ESP_LOGE(TAG, "Recovery failed - system may need manual intervention");
+                }
+
+                // Skip rest of this loop cycle - let recovery settle
+                vTaskDelay(pdMS_TO_TICKS(5000));
+                continue;
+            }
+        }
+
+        // ====================================================================
+        // Normal operation continues below
+        // ====================================================================
+
         // Read current time from RTC
         ret = wordclock_time_get(&current_time);
         if (ret == ESP_OK) {
@@ -414,8 +445,20 @@ static void test_live_word_clock(void) {
             // Display time with transitions
             display_german_time_with_transitions(&current_time);
 
-            // Only validate if display actually changed
-            if (should_validate) {
+            // CRITICAL FIX: Force validation if we have unresolved failures
+            // This ensures automatic recovery continues every cycle until successful
+            bool force_validation = false;
+            if (!first_loop) {  // Skip first loop (already validating above)
+                validation_statistics_t stats;
+                get_validation_statistics(&stats);
+                if (stats.consecutive_failures > 0) {
+                    force_validation = true;
+                    ESP_LOGW(TAG, "🔁 Forcing validation due to %d consecutive failures", stats.consecutive_failures);
+                }
+            }
+
+            // Validate if display changed OR we have unresolved failures
+            if (should_validate || force_validation) {
                 // Sync LED state after transitions
                 sync_led_state_after_transitions();
 

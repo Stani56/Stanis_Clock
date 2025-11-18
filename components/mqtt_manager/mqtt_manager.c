@@ -23,6 +23,9 @@
 #include "chime_manager.h"  // ESP32-S3: Westminster chimes (Phase 2.3)
 #include "ota_manager.h"    // ESP32-S3: OTA firmware updates (Phase 2.4)
 
+// External functions and globals from main/ (avoids pulling in heavy header dependencies)
+extern uint8_t led_state[10][16];  // Global LED state cache (wordclock_display.c)
+
 static const char *TAG = "MQTT_MANAGER";
 
 // External global variables (defined in wifi_manager.c) - DEPRECATED, use thread-safe accessors
@@ -1193,7 +1196,16 @@ static esp_err_t mqtt_handle_command(const char* payload, int payload_len) {
 
             if (tlc59116_init_all() == ESP_OK) {
                 ESP_LOGI(TAG, "✅ Manual hardware reset successful - devices re-initialized");
-                ESP_LOGI(TAG, "LED display will auto-restore on next update cycle");
+
+                // Force LED state refresh: Hardware reset clears all TLC PWM registers to 0,
+                // but software's cached led_state[][] still has old values.
+                // Clear the software cache so next display update will see all LEDs as needing update.
+                ESP_LOGI(TAG, "🔄 Clearing LED state cache...");
+                memset(led_state, 0, sizeof(led_state));
+
+                // Trigger display refresh which will rebuild from current time
+                ESP_LOGI(TAG, "🔄 Display will refresh on next 5-second update cycle");
+
                 mqtt_publish_status("tlc_reset_success");
             } else {
                 ESP_LOGE(TAG, "❌ Re-initialization failed after hardware reset");
